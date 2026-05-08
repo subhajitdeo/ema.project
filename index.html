@@ -4,16 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>Zara.ai | Futuristic AI Assistant</title>
-    <!-- Fonts & Icons -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <!-- Marked.js for markdown -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- DOMPurify for XSS prevention -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="glass-panel container">
-        <!-- Header with Orb, Title, Controls -->
         <div class="header">
             <div class="orb-container">
                 <div class="ai-orb" id="aiOrb">
@@ -39,7 +38,7 @@
                     <i class="fas fa-brain"></i>
                     <select id="modelSelect">
                         <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek (free)</option>
-                        <option value="mistralai/mistral-7b-instruct:free">Mistral 7B (free)</option>
+                        <option value="ring-2.6-1t:free" selected>Ring-2.6-1T (free)</option>
                         <option value="google/gemma-3-27b-it:free">Google Gemma 3 (free)</option>
                         <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (free)</option>
                     </select>
@@ -47,26 +46,15 @@
             </div>
         </div>
 
-        <!-- Chat Panel -->
         <div class="chat-panel" id="chatPanel">
-            <div class="chat-messages" id="chatMessages">
-                <div class="message ai-message">
-                    <div class="avatar"><i class="fas fa-microchip"></i></div>
-                    <div class="content">
-                        <p>✨ Hello, I'm Zara. I listen, think, and act. Tap the mic or type below.</p>
-                    </div>
-                    <div class="timestamp">just now</div>
-                </div>
-            </div>
+            <div class="chat-messages" id="chatMessages"></div>
         </div>
 
-        <!-- Thinking Indicator -->
         <div class="thinking-indicator" id="thinkingIndicator">
             <div class="thinking-dots"><span></span><span></span><span></span></div>
             <span id="thinkingText">Zara is thinking...</span>
         </div>
 
-        <!-- Input Area -->
         <div class="input-area">
             <button id="micBtn" class="mic-btn glass-btn"><i class="fas fa-microphone"></i></button>
             <input type="text" id="userInput" placeholder="Ask me anything..." autocomplete="off">
@@ -74,7 +62,6 @@
         </div>
         <div class="voice-status" id="voiceStatus"></div>
         
-        <!-- Continuous Mode Toggle -->
         <div class="continuous-toggle">
             <label class="switch-label">
                 <span class="toggle-text"><i class="fas fa-microphone-alt"></i> Continuous Mode</span>
@@ -85,7 +72,7 @@
             </label>
         </div>
 
-        <div class="footer-note">⚡ Zara • Memory enabled • Instant commands • Typing animation</div>
+        <div class="footer-note">⚡ Zara • Memory enabled • Secure markdown • Typing animation</div>
     </div>
     <script src="script.js"></script>
 </body>
