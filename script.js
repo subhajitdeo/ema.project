@@ -1,4 +1,5 @@
-// script.js - Zara.ai Core: Speech, AI Tool System, OpenRouter, LocalStorage Memory
+// ==================== script.js ====================
+// Zara.ai - Futuristic AI Assistant with Voice, Tools & Memory
 
 // ---------- DOM Elements ----------
 const chatMessages = document.getElementById('chatMessages');
@@ -18,10 +19,10 @@ let isListening = false;
 let recognition = null;
 let synth = window.speechSynthesis;
 
-// Load API key to input field
+// Load API key into input field
 if (openRouterApiKey) apiKeyInput.value = openRouterApiKey;
 
-// Save API key
+// Save API key to localStorage
 saveApiKeyBtn.addEventListener('click', () => {
     openRouterApiKey = apiKeyInput.value.trim();
     if (openRouterApiKey) {
@@ -29,11 +30,11 @@ saveApiKeyBtn.addEventListener('click', () => {
         addSystemMessage('🔑 API key saved. You can now use Zara AI.', false);
     } else {
         localStorage.removeItem('zara_openrouter_key');
-        addSystemMessage('⚠️ API key removed, some features limited.', false);
+        addSystemMessage('⚠️ API key removed. Some features will be limited.', true);
     }
 });
 
-// Helper: add message to chat history
+// ---------- Helper: Add message to chat ----------
 function addMessage(text, isUser, toolData = null) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isUser ? 'user-message' : 'ai-message'}`;
@@ -56,7 +57,7 @@ function addMessage(text, isUser, toolData = null) {
     chatMessages.appendChild(messageDiv);
     messageDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     
-    // Save to localStorage memory (simple history)
+    // Save to localStorage memory (chat history)
     let history = JSON.parse(localStorage.getItem('zara_chat_history') || '[]');
     history.push({ role: isUser ? 'user' : 'assistant', content: text, timestamp: Date.now() });
     if (history.length > 50) history = history.slice(-50);
@@ -69,10 +70,10 @@ function addSystemMessage(text, isError = false) {
     msgDiv.style.opacity = '0.8';
     msgDiv.innerHTML = `<div class="avatar"><i class="fas fa-info-circle"></i></div><div class="content"><p style="color:${isError?'#ff9999':'#aaffdd'}">⚡ ${text}</p></div>`;
     chatMessages.appendChild(msgDiv);
-    msgDiv.scrollIntoView({ behavior: 'smooth' });
+    msgDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-// Text-to-Speech
+// ---------- Text-to-Speech ----------
 function speakText(text) {
     if (!synth) return;
     synth.cancel();
@@ -83,15 +84,12 @@ function speakText(text) {
     synth.speak(utterance);
 }
 
-// ---------- TOOL SYSTEM + AI RESPONSE HANDLER ----------
-// Built-in tools: Weather (free API fallback), News (simulated summarization + open websites), YouTube, Wikipedia, Google
-// The AI will return JSON with tool, speak, open, and extra context.
-
+// ---------- TOOL EXECUTION ENGINE ----------
+// Executes actions based on AI's JSON decision: opens websites, fetches extra data (like live weather), speaks.
 async function executeToolCommand(toolObj) {
-    // toolObj: { tool, speak, open, query, summary?, additionalData? }
-    const { tool, speak, open: urlToOpen, query, summary, newsItems } = toolObj;
+    const { tool, speak, open: urlToOpen, query, summary } = toolObj;
     
-    // Speak first
+    // Speak the response
     if (speak) {
         speakText(speak);
         addMessage(speak, false, { sourceLinks: urlToOpen ? [{ label: `Open ${tool.toUpperCase()} Source`, url: urlToOpen }] : [] });
@@ -99,42 +97,39 @@ async function executeToolCommand(toolObj) {
         addMessage("Action completed.", false);
     }
     
-    // Open website in new tab
+    // Open website in new tab (if provided)
     if (urlToOpen) {
         setTimeout(() => {
             window.open(urlToOpen, '_blank');
         }, 800);
     }
     
-    // For weather: we can fetch real data using Open-Meteo (free, no key) to enrich answer if AI didn't provide full details
+    // --- WEATHER: fetch live data using Open-Meteo (no API key needed) ---
     if (tool === 'weather' && query) {
         try {
-            // query example: "London" or "current weather"
-            const location = query.replace(/weather|in|for/gi, '').trim();
-            if (location) {
-                const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`;
-                const geoRes = await fetch(geoUrl);
-                const geoData = await geoRes.json();
-                if (geoData.results && geoData.results.length) {
-                    const { latitude, longitude, name } = geoData.results[0];
-                    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&timezone=auto`;
-                    const wRes = await fetch(weatherUrl);
-                    const wData = await wRes.json();
-                    if (wData.current_weather) {
-                        const temp = wData.current_weather.temperature;
-                        const wind = wData.current_weather.windspeed;
-                        const weatherText = `🌡️ Real-time: ${temp}°C, Wind ${wind} km/h in ${name}.`;
-                        addMessage(weatherText, false);
-                        speakText(weatherText);
-                    }
+            let location = query.replace(/weather|in|for|current/gi, '').trim();
+            if (!location) location = "London";
+            const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`;
+            const geoRes = await fetch(geoUrl);
+            const geoData = await geoRes.json();
+            if (geoData.results && geoData.results.length) {
+                const { latitude, longitude, name } = geoData.results[0];
+                const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&timezone=auto`;
+                const wRes = await fetch(weatherUrl);
+                const wData = await wRes.json();
+                if (wData.current_weather) {
+                    const temp = wData.current_weather.temperature;
+                    const wind = wData.current_weather.windspeed;
+                    const weatherText = `🌡️ Real-time: ${temp}°C, Wind ${wind} km/h in ${name}.`;
+                    addMessage(weatherText, false);
+                    speakText(weatherText);
                 }
             }
-        } catch(e) { console.warn("weather fetch fallback"); }
+        } catch(e) { console.warn("Weather fetch fallback:", e); }
     }
     
-    // For news: provide top story suggestions, open BBC/Reuters automatically
+    // --- NEWS: automatically open Reuters/CNN for credibility ---
     if (tool === 'news') {
-        // automatically open Reuters or BBC
         setTimeout(() => {
             window.open('https://www.reuters.com/', '_blank');
             addMessage("📰 Opened Reuters for trusted news.", false);
@@ -142,7 +137,7 @@ async function executeToolCommand(toolObj) {
     }
 }
 
-// Main AI function: call OpenRouter + parse tool JSON
+// ---------- MAIN AI FUNCTION: OpenRouter + Tool Parsing ----------
 async function askZara(userPrompt) {
     if (!openRouterApiKey) {
         addSystemMessage("⚠️ Please enter your OpenRouter API key (top right). Get one at openrouter.ai/keys", true);
@@ -152,19 +147,25 @@ async function askZara(userPrompt) {
     
     thinkingIndicator.classList.add('active');
     try {
-        // Build conversation memory from localStorage (last 6 exchanges)
+        // Load recent conversation history (last 8 messages) for context
         let history = JSON.parse(localStorage.getItem('zara_chat_history') || '[]');
         let recent = history.slice(-8);
         let messages = [
-            { role: "system", content: `You are Zara, a futuristic AI assistant. You must answer naturally and use tools when appropriate. 
-            Format your response as a JSON object with fields: tool, speak, open (optional URL), query (search term), and optionally summary.
-            Available tools: "weather" (user asks weather), "news" (latest news), "youtube" (search youtube), "wikipedia" (search wiki), "google" (general search), "none".
-            For weather: open URL "https://windy.com" or "https://weather.com". For news: open "https://reuters.com", speak summary. For youtube: open "https://youtube.com/results?search_query=QUERY". 
-            For wikipedia: open "https://en.wikipedia.org/wiki/QUERY".
-            Example: {"tool":"youtube","speak":"Opening YouTube search for cats","open":"https://youtube.com/results?search_query=cats","query":"cats"}
-            Example weather: {"tool":"weather","speak":"Let me show you live weather radar","open":"https://windy.com","query":"New York"}
-            Example news: {"tool":"news","speak":"Here are the latest headlines. Opening Reuters.","open":"https://reuters.com","summary":"Global tensions rise..."}
-            Respond ONLY with valid JSON. Do not add extra text.` },
+            { role: "system", content: `You are Zara, a futuristic AI assistant. You must respond with a JSON object only. Do not add any extra text. Use the following structure:
+{
+  "tool": "weather" or "news" or "youtube" or "wikipedia" or "google" or "none",
+  "speak": "Your natural spoken response",
+  "open": "optional URL to open automatically",
+  "query": "search term or location (if needed)"
+}
+Examples:
+- Weather: {"tool":"weather","speak":"Opening live weather radar for London","open":"https://windy.com","query":"London"}
+- YouTube: {"tool":"youtube","speak":"Searching YouTube for cute cats","query":"cute cats"}
+- News: {"tool":"news","speak":"Here are the latest headlines. Opening Reuters.","open":"https://reuters.com"}
+- Wikipedia: {"tool":"wikipedia","speak":"Opening Wikipedia article","query":"Artificial Intelligence"}
+- Google: {"tool":"google","speak":"Searching Google","query":"latest SpaceX launch"}
+- Normal chat: {"tool":"none","speak":"Your conversational reply"}
+Always output valid JSON.` },
             ...recent.map(m => ({ role: m.role, content: m.content })),
             { role: "user", content: userPrompt }
         ];
@@ -178,7 +179,7 @@ async function askZara(userPrompt) {
                 "X-Title": "Zara AI Assistant"
             },
             body: JSON.stringify({
-                model: "openai/gpt-3.5-turbo", // or "mistralai/mistral-7b-instruct"
+                model: "openai/gpt-3.5-turbo",  // you can change to "mistralai/mistral-7b-instruct" if preferred
                 messages: messages,
                 temperature: 0.4,
                 max_tokens: 300
@@ -187,44 +188,45 @@ async function askZara(userPrompt) {
         
         if (!response.ok) {
             const errData = await response.text();
-            throw new Error(`API Error: ${response.status} ${errData}`);
+            throw new Error(`API Error ${response.status}: ${errData}`);
         }
         
         const data = await response.json();
         let aiRaw = data.choices[0].message.content;
-        // Clean possible markdown json
+        // Clean potential markdown code fences
         aiRaw = aiRaw.replace(/```json/g, '').replace(/```/g, '').trim();
+        
         let aiJson;
         try {
             aiJson = JSON.parse(aiRaw);
         } catch(e) {
-            // fallback: treat as normal reply without tool
+            // Fallback: treat as normal reply without tool
             aiJson = { tool: "none", speak: aiRaw.substring(0, 200), open: null };
         }
         
-        // Validate tool
+        // Validate tool name
         const validTools = ['weather', 'news', 'youtube', 'wikipedia', 'google', 'none'];
         if (!validTools.includes(aiJson.tool)) aiJson.tool = 'none';
         
-        // Process tool actions
+        // Auto-fill missing open URLs based on tool
+        if (aiJson.tool === 'youtube' && aiJson.query) {
+            aiJson.open = `https://www.youtube.com/results?search_query=${encodeURIComponent(aiJson.query)}`;
+        }
+        if (aiJson.tool === 'wikipedia' && aiJson.query) {
+            aiJson.open = `https://en.wikipedia.org/wiki/${encodeURIComponent(aiJson.query.replace(/ /g, '_'))}`;
+        }
+        if (aiJson.tool === 'google' && aiJson.query) {
+            aiJson.open = `https://www.google.com/search?q=${encodeURIComponent(aiJson.query)}`;
+        }
+        if (aiJson.tool === 'weather' && !aiJson.open) aiJson.open = "https://windy.com";
+        if (aiJson.tool === 'news' && !aiJson.open) aiJson.open = "https://reuters.com";
+        
+        // Execute the tool or normal chat
         if (aiJson.tool !== 'none') {
-            if (aiJson.tool === 'youtube' && aiJson.query) {
-                aiJson.open = `https://www.youtube.com/results?search_query=${encodeURIComponent(aiJson.query)}`;
-            }
-            if (aiJson.tool === 'wikipedia' && aiJson.query) {
-                aiJson.open = `https://en.wikipedia.org/wiki/${encodeURIComponent(aiJson.query.replace(/ /g, '_'))}`;
-            }
-            if (aiJson.tool === 'google' && aiJson.query) {
-                aiJson.open = `https://www.google.com/search?q=${encodeURIComponent(aiJson.query)}`;
-            }
-            if (aiJson.tool === 'weather' && !aiJson.open) aiJson.open = "https://windy.com";
-            if (aiJson.tool === 'news' && !aiJson.open) aiJson.open = "https://reuters.com";
-            
             await executeToolCommand(aiJson);
         } else {
-            // Standard conversational answer
-            let replyText = aiJson.speak || (typeof aiJson === 'object' ? "Processing..." : aiRaw);
-            if (replyText.length < 5) replyText = aiRaw.substring(0, 300);
+            let replyText = aiJson.speak || (typeof aiJson === 'object' ? "I'm processing your request." : aiRaw);
+            if (replyText.length < 2) replyText = "I received your message but couldn't generate a proper response.";
             addMessage(replyText, false);
             speakText(replyText);
         }
@@ -232,13 +234,13 @@ async function askZara(userPrompt) {
     } catch (error) {
         console.error(error);
         addSystemMessage(`❌ AI error: ${error.message}. Check API key or network.`, true);
-        speakText("Sorry, I encountered an error. Check your API key.");
+        speakText("Sorry, I encountered an error. Please check your API key or try again later.");
     } finally {
         thinkingIndicator.classList.remove('active');
     }
 }
 
-// ---------- Voice Recognition ----------
+// ---------- VOICE RECOGNITION ----------
 function initSpeechRecognition() {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
         addSystemMessage("❌ Voice recognition not supported in this browser. Use typing.", true);
@@ -270,7 +272,6 @@ function initSpeechRecognition() {
         userInput.value = transcript;
         voiceStatusSpan.innerText = `🗣️ Recognized: "${transcript}"`;
         setTimeout(() => voiceStatusSpan.innerText = "", 2000);
-        // Automatically send
         processUserInput(transcript);
     };
     recog.onerror = (e) => {
@@ -294,7 +295,7 @@ function startListening() {
     }
 }
 
-// handle typed or voice input
+// ---------- PROCESS USER INPUT (typed or voice) ----------
 async function processUserInput(text) {
     if (!text.trim()) return;
     addMessage(text, true);
@@ -302,16 +303,15 @@ async function processUserInput(text) {
     await askZara(text);
 }
 
-// Event listeners
+// ---------- EVENT LISTENERS ----------
 sendBtn.addEventListener('click', () => processUserInput(userInput.value));
 userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') processUserInput(userInput.value); });
 micBtn.addEventListener('click', startListening);
 
-// Additional: Load previous chat history from localStorage on startup
+// ---------- LOAD PREVIOUS CHAT HISTORY ON STARTUP ----------
 function loadChatHistory() {
     let history = JSON.parse(localStorage.getItem('zara_chat_history') || '[]');
     if (history.length === 0) return;
-    // show last 12 messages
     const lastMessages = history.slice(-12);
     chatMessages.innerHTML = '';
     lastMessages.forEach(msg => {
@@ -322,7 +322,7 @@ function loadChatHistory() {
 }
 loadChatHistory();
 
-// small intro effect
+// Greeting on load
 setTimeout(() => {
     speakText("Zara AI ready. Use your voice or type.");
 }, 800);
