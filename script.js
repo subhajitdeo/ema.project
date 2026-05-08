@@ -1,5 +1,5 @@
-// ==================== script.js ====================
-// Zara.ai - Ultimate Upgrade: Streaming, Smart Memory, Stable Voice, JSON Guarantee
+// ==================== script.js - STABLE CORE ====================
+// Command routing, memory system, local weather, math parser, speech queue
 
 // ---------- DOM Elements ----------
 const chatMessages = document.getElementById('chatMessages');
@@ -23,43 +23,39 @@ let synth = window.speechSynthesis;
 let continuousMode = true;
 let isSpeaking = false;
 let pendingRestart = false;
-let abortController = null;          // for streaming cancellation
 
-// ---------- Voice Preparation ----------
+// ---------- Memory System (persistent) ----------
+let zaraMemory = JSON.parse(localStorage.getItem('zara_memory')) || {
+    name: "Subha",               // default user name (customize)
+    interests: ["technology", "AI"],
+    preferences: { continuousMode: true },
+    lastSeen: Date.now(),
+    conversationCount: 0
+};
+
+function saveMemory() {
+    localStorage.setItem('zara_memory', JSON.stringify(zaraMemory));
+}
+saveMemory();
+
+// ---------- Voice Loading ----------
 let availableVoices = [];
-function loadVoices() {
-    availableVoices = speechSynthesis.getVoices();
-}
+function loadVoices() { availableVoices = speechSynthesis.getVoices(); }
 loadVoices();
-if (speechSynthesis.onvoiceschanged !== undefined) {
-    speechSynthesis.onvoiceschanged = loadVoices;
-}
+if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = loadVoices;
 
-// ---------- Site Map (for direct opening) ----------
+// ---------- Site Map ----------
 const siteMap = {
-    youtube: 'https://youtube.com',
-    gmail: 'https://mail.google.com',
-    whatsapp: 'https://web.whatsapp.com',
-    instagram: 'https://instagram.com',
-    github: 'https://github.com',
-    twitter: 'https://x.com',
-    reddit: 'https://reddit.com',
-    spotify: 'https://spotify.com',
-    netflix: 'https://netflix.com',
-    facebook: 'https://facebook.com',
-    linkedin: 'https://linkedin.com',
-    amazon: 'https://amazon.com',
-    twitch: 'https://twitch.tv',
-    discord: 'https://discord.com',
-    google: 'https://google.com',
-    bing: 'https://bing.com',
-    cnn: 'https://cnn.com',
-    bbc: 'https://bbc.com',
-    reuters: 'https://reuters.com',
+    youtube: 'https://youtube.com', gmail: 'https://mail.google.com', whatsapp: 'https://web.whatsapp.com',
+    instagram: 'https://instagram.com', github: 'https://github.com', twitter: 'https://x.com',
+    reddit: 'https://reddit.com', spotify: 'https://spotify.com', netflix: 'https://netflix.com',
+    facebook: 'https://facebook.com', linkedin: 'https://linkedin.com', amazon: 'https://amazon.com',
+    twitch: 'https://twitch.tv', discord: 'https://discord.com', google: 'https://google.com',
+    bing: 'https://bing.com', cnn: 'https://cnn.com', bbc: 'https://bbc.com', reuters: 'https://reuters.com',
     wikipedia: 'https://wikipedia.org'
 };
 
-// ---------- UI Helpers ----------
+// ---------- UI Helpers (Markdown enabled) ----------
 function renderMessage(text, isUser, toolData = null, isError = false) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isUser ? 'user-message' : 'ai-message'}`;
@@ -70,31 +66,36 @@ function renderMessage(text, isUser, toolData = null, isError = false) {
     if (toolData?.sourceLinks?.length) {
         sourceHtml = `<div class="source-links">${toolData.sourceLinks.map(link => `<a href="${link.url}" target="_blank" class="source-link"><i class="fas fa-external-link-alt"></i> ${link.label}</a>`).join('')}</div>`;
     }
+    // Render markdown for AI messages
+    let contentHtml = text;
+    if (!isUser && typeof marked !== 'undefined') {
+        contentHtml = marked.parse(text);
+    }
     messageDiv.innerHTML = `
         <div class="avatar">${avatarIcon}</div>
-        <div class="content"><p>${text}</p>${sourceHtml}</div>
+        <div class="content">${contentHtml}${sourceHtml}</div>
         <div class="timestamp">${timestamp}</div>
     `;
     chatMessages.appendChild(messageDiv);
     messageDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-function addSystemMessage(text, isError = false) {
-    renderMessage(text, false, null, isError);
-}
-
+function addSystemMessage(text, isError = false) { renderMessage(text, false, null, isError); }
 function addMessage(text, isUser, toolData = null) {
     renderMessage(text, isUser, toolData);
     let history = JSON.parse(localStorage.getItem('zara_chat_history') || '[]');
     history.push({ role: isUser ? 'user' : 'assistant', content: text, timestamp: Date.now() });
-    if (history.length > 100) history = history.slice(-100); // keep more for summaries
+    if (history.length > 100) history = history.slice(-100);
     localStorage.setItem('zara_chat_history', JSON.stringify(history));
+    // Update memory conversation count
+    zaraMemory.conversationCount++;
+    saveMemory();
 }
 
-// ---------- Text-to-Speech ----------
+// ---------- Speech with queue protection ----------
 function speakText(text) {
     if (!synth) return;
-    synth.cancel();
+    if (synth.speaking) synth.cancel();  // prevent overlapping
     isSpeaking = true;
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 0.95;
@@ -102,8 +103,7 @@ function speakText(text) {
     const voices = availableVoices.length ? availableVoices : synth.getVoices();
     utterance.voice = voices.find(v => v.name.includes("Google")) ||
                       voices.find(v => v.name.includes("Microsoft")) ||
-                      voices.find(v => v.lang === "en-US") ||
-                      voices[0];
+                      voices.find(v => v.lang === "en-US") || voices[0];
     utterance.onend = () => {
         isSpeaking = false;
         if (continuousMode && !isListening && !pendingRestart && !userInput.value.trim()) {
@@ -117,7 +117,7 @@ function speakText(text) {
     synth.speak(utterance);
 }
 
-// ---------- Enhanced Weather ----------
+// ---------- Weather (local fetch) ----------
 async function fetchDetailedWeather(location) {
     try {
         const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`;
@@ -142,58 +142,106 @@ async function fetchDetailedWeather(location) {
         let clothingTip = temp > 30 ? "Wear light clothes." : (temp < 10 ? "Heavy jacket needed." : "Comfortable.");
         let umbrellaTip = rainProb > 50 ? "Bring an umbrella!" : (rainProb > 20 ? "Maybe an umbrella." : "");
         let travelWarning = wind > 30 ? "Strong winds – be careful." : "";
-        const summary = `📍 ${name}: ${temp}°C, feels like ${feelsLike}°C. Humidity ${humidity}%, wind ${wind} km/h, ${condition}. Rain chance ${rainProb}%. ${clothingTip} ${umbrellaTip} ${travelWarning}`;
-        return { summary, openUrl: "https://windy.com" };
+        return { summary: `📍 ${name}: ${temp}°C, feels like ${feelsLike}°C. Humidity ${humidity}%, wind ${wind} km/h, ${condition}. Rain chance ${rainProb}%. ${clothingTip} ${umbrellaTip} ${travelWarning}` };
     } catch(e) { return null; }
 }
 
-// ---------- Execute Tool (with popup protection) ----------
 async function executeToolCommand(toolObj) {
     const { tool, speak, open: urlToOpen, query } = toolObj;
     if (speak) {
         speakText(speak);
         addMessage(speak, false, { sourceLinks: urlToOpen ? [{ label: `Open ${tool.toUpperCase()}`, url: urlToOpen }] : [] });
-    } else {
-        addMessage("Action completed.", false);
-    }
+    } else addMessage("Action completed.", false);
     if (urlToOpen) {
-        setTimeout(() => {
-            const newWin = window.open(urlToOpen, '_blank');
-            if (!newWin) addSystemMessage("⚠️ Popup blocked. Please allow popups.", true);
-        }, 800);
+        setTimeout(() => { const newWin = window.open(urlToOpen, '_blank'); if (!newWin) addSystemMessage("⚠️ Popup blocked.", true); }, 800);
     }
     if (tool === 'weather' && query) {
         let loc = query.replace(/weather|in|for|current/gi, '').trim() || "London";
         const data = await fetchDetailedWeather(loc);
-        if (data) {
-            addMessage(data.summary, false);
-            speakText(data.summary);
-        } else addMessage("Weather fetch failed.", false);
+        if (data) { addMessage(data.summary, false); speakText(data.summary); } 
+        else addMessage("Weather fetch failed.", false);
     }
-    if (tool === 'news') {
-        setTimeout(() => window.open('https://www.reuters.com/', '_blank'), 1000);
-    }
+    if (tool === 'news') setTimeout(() => window.open('https://www.reuters.com/', '_blank'), 1000);
 }
 
-// ---------- LOCAL COMMAND PARSER (bypass AI for speed) ----------
-function parseLocalCommand(text) {
-    const lower = text.toLowerCase().trim();
-    // "open youtube", "open gmail", "open X"
-    if (lower.startsWith("open ")) {
-        const site = lower.slice(5).trim();
+// ==================== COMMAND HANDLERS (priority routing) ====================
+const commandHandlers = [];
+
+// 1. Time (regex word boundary)
+function handleTime(text) {
+    if (/\btime\b/.test(text)) {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute:'2-digit', second:'2-digit' });
+        const reply = `The current time is ${timeStr}.`;
+        addMessage(reply, false); speakText(reply);
+        return true;
+    }
+    return false;
+}
+commandHandlers.push(handleTime);
+
+// 2. Date
+function handleDate(text) {
+    if (/\bdate\b/.test(text)) {
+        const now = new Date();
+        const dateStr = now.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        const reply = `Today is ${dateStr}.`;
+        addMessage(reply, false); speakText(reply);
+        return true;
+    }
+    return false;
+}
+commandHandlers.push(handleDate);
+
+// 3. Math (safe evaluation)
+function handleMath(text) {
+    // Detect if it's likely a math expression: contains digits and operators, not too long
+    if (!/[0-9+\-*/().]/.test(text)) return false;
+    // Remove dangerous characters
+    let sanitized = text.replace(/[^0-9+\-*/().]/g, '');
+    if (!sanitized) return false;
+    try {
+        const result = Function(`return ${sanitized}`)();
+        if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
+            const reply = `${sanitized} = ${result}`;
+            addMessage(reply, false); speakText(reply);
+            return true;
+        }
+    } catch(e) {}
+    return false;
+}
+commandHandlers.push(handleMath);
+
+// 4. Weather (local detection)
+function handleWeather(text) {
+    if (/\bweather\b/.test(text)) {
+        executeToolCommand({ tool: "weather", query: text });
+        return true;
+    }
+    return false;
+}
+commandHandlers.push(handleWeather);
+
+// 5. Open website
+function handleOpenSite(text) {
+    if (/^open\s+\w+/.test(text)) {
+        const site = text.replace(/^open\s+/, '').trim().toLowerCase();
         if (siteMap[site]) {
-            const url = siteMap[site];
-            executeToolCommand({ tool: "open_site", speak: `Opening ${site}.`, open: url, query: site });
+            executeToolCommand({ tool: "open_site", speak: `Opening ${site}.`, open: siteMap[site], query: site });
             return true;
         } else {
-            // Fallback to Google search
             const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(site)}`;
-            executeToolCommand({ tool: "open_site", speak: `I don't have a direct link for "${site}". Searching Google.`, open: searchUrl, query: site });
+            executeToolCommand({ tool: "open_site", speak: `Searching Google for "${site}".`, open: searchUrl, query: site });
             return true;
         }
     }
-    // "search cats on youtube"
-    if (lower.includes("search") && lower.includes("youtube")) {
+    return false;
+}
+commandHandlers.push(handleOpenSite);
+
+// 6. YouTube search
+function handleYouTubeSearch(text) {
+    if (/\bsearch.*youtube\b/.test(text) || /\byoutube.*search\b/.test(text)) {
         let query = text.replace(/search|on|youtube/gi, '').trim();
         if (query) {
             const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
@@ -201,44 +249,96 @@ function parseLocalCommand(text) {
             return true;
         }
     }
-    // "weather in tokyo" (optional direct weather)
-    if (lower.includes("weather")) {
-        // Let AI handle detailed weather – but we could also pre‑fetch. Not necessary.
-        return false;
+    return false;
+}
+commandHandlers.push(handleYouTubeSearch);
+
+// 7. Greetings (word boundaries)
+function handleGreeting(text) {
+    if (/\b(hi|hello|hey|good morning|good afternoon|good evening)\b/.test(text)) {
+        const hour = new Date().getHours();
+        let greeting = "Hello";
+        if (hour < 12) greeting = "Good morning";
+        else if (hour < 18) greeting = "Good afternoon";
+        else greeting = "Good evening";
+        const reply = `${greeting}, ${zaraMemory.name}! I'm Zara. How can I help you today?`;
+        addMessage(reply, false); speakText(reply);
+        return true;
+    }
+    return false;
+}
+commandHandlers.push(handleGreeting);
+
+// 8. Thanks / Goodbye
+function handleThanks(text) {
+    if (/\b(thank|thanks)\b/.test(text)) {
+        const reply = "You're very welcome! I'm happy to help.";
+        addMessage(reply, false); speakText(reply);
+        return true;
+    }
+    if (/\b(goodbye|bye)\b/.test(text)) {
+        const reply = "Goodbye! Come back anytime.";
+        addMessage(reply, false); speakText(reply);
+        return true;
+    }
+    return false;
+}
+commandHandlers.push(handleThanks);
+
+// 9. Help
+function handleHelp(text) {
+    if (/\b(what can you do|help|capabilities)\b/.test(text)) {
+        const reply = "I can tell time and date, do math, open websites, search YouTube, fetch live weather, get news, answer questions, and remember our conversation. Just ask!";
+        addMessage(reply, false); speakText(reply);
+        return true;
+    }
+    return false;
+}
+commandHandlers.push(handleHelp);
+
+// 10. Set user name (memory)
+function handleSetName(text) {
+    const match = text.match(/my name is (\w+)/i);
+    if (match) {
+        zaraMemory.name = match[1];
+        saveMemory();
+        const reply = `Nice to meet you, ${zaraMemory.name}! I'll remember that.`;
+        addMessage(reply, false); speakText(reply);
+        return true;
+    }
+    return false;
+}
+commandHandlers.push(handleSetName);
+
+// ---------- MAIN COMMAND ROUTER ----------
+function handleLocalCommand(text) {
+    for (const handler of commandHandlers) {
+        if (handler(text)) return true;
     }
     return false;
 }
 
-// ---------- STREAMING + JSON + SMART MEMORY ----------
+// ---------- AI CALL (with memory context) ----------
 async function askZara(userPrompt) {
+    if (handleLocalCommand(userPrompt)) return;  // instant local handling
+
     openRouterApiKey = localStorage.getItem('zara_openrouter_key') || '';
     if (!openRouterApiKey.trim()) {
-        addSystemMessage("❌ No API key. Please enter your OpenRouter API key.", true);
-        speakText("Please set your API key.");
+        addSystemMessage("❌ No API key found. Please enter your OpenRouter API key.", true);
+        speakText("Please set your API key first.");
         return;
     }
 
-    // First, check local command (fast path)
-    if (parseLocalCommand(userPrompt)) return;
-
     thinkingIndicator.classList.add('active');
     thinkingTextSpan.innerText = "Zara is thinking...";
-    
-    // Cancel previous streaming request
-    if (abortController) abortController.abort();
-    abortController = new AbortController();
 
     try {
-        // --- Smart Memory: last 30 messages + periodic summary ---
         let history = JSON.parse(localStorage.getItem('zara_chat_history') || '[]');
-        let recent = history.slice(-30);   // 30 messages context
-        // Optional: add a compact summary every 10 messages? For simplicity, we'll keep 30 messages.
-        
-        const systemPrompt = `You are Zara, a futuristic AI assistant with personality. Be conversational, intelligent, and warm. Remember context, continue naturally. Use tools when helpful. Respond ONLY in valid JSON. Never break JSON format.
+        let recent = history.slice(-30);
+        const systemPrompt = `You are Zara, a futuristic AI assistant. The user's name is ${zaraMemory.name}. Their interests include ${zaraMemory.interests.join(', ')}. Be conversational, warm, and helpful. Answer general knowledge questions accurately. Use tools only when clearly needed (weather, news, open website). Respond ONLY in valid JSON.
 
-Format: {"tool":"weather|news|youtube|wikipedia|google|open_site|none", "speak":"your natural response", "open":"optional url", "query":"optional query"}
-
-Capabilities: open websites (e.g., "open youtube"), search YouTube, Google, fetch weather, continue conversations. For "open_site", if query matches a known site (youtube, gmail, etc.) provide its URL; otherwise fallback to Google search. Weather queries should include location. Keep responses human-like, concise, and helpful.`;
+Format: {"tool":"weather|news|youtube|wikipedia|google|open_site|none","speak":"your natural answer","open":"optional url","query":"optional"}
+For weather, include query. For normal chat, tool "none". Never add extra text.`;
 
         const messages = [
             { role: "system", content: systemPrompt },
@@ -246,102 +346,51 @@ Capabilities: open websites (e.g., "open youtube"), search YouTube, Google, fetc
             { role: "user", content: userPrompt }
         ];
 
-        // Use streaming with response_format json_object
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
-            headers: {
-                "Authorization": `Bearer ${openRouterApiKey.trim()}`,
-                "Content-Type": "application/json",
-                "HTTP-Referer": window.location.origin,
-                "X-Title": "Zara AI Assistant"
-            },
-            body: JSON.stringify({
-                model: "deepseek/deepseek-chat-v3-0324:free",
-                messages: messages,
-                response_format: { type: "json_object" },  // HUGE: guarantees JSON
-                temperature: 0.8,        // more personality
-                top_p: 0.95,
-                max_tokens: 700,
-                stream: true
-            }),
-            signal: abortController.signal
+            headers: { "Authorization": `Bearer ${openRouterApiKey.trim()}`, "Content-Type": "application/json", "HTTP-Referer": window.location.origin, "X-Title": "Zara AI Assistant" },
+            body: JSON.stringify({ model: "deepseek/deepseek-chat-v3-0324:free", messages, temperature: 0.7, max_tokens: 700 })
         });
 
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let fullContent = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop();
-            for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    const data = line.slice(6);
-                    if (data === '[DONE]') continue;
-                    try {
-                        const parsed = JSON.parse(data);
-                        const chunk = parsed.choices[0]?.delta?.content || '';
-                        fullContent += chunk;
-                        // Optional: live typing effect – we skip for simplicity but could update a temporary message.
-                    } catch(e) {}
-                }
-            }
-        }
-
-        if (!fullContent) throw new Error("Empty response");
-        // Clean and parse JSON
-        let cleanJson = fullContent.replace(/```json/g, '').replace(/```/g, '').trim();
-        let aiJson;
-        try {
-            const match = cleanJson.match(/\{[\s\S]*\}/);
-            aiJson = JSON.parse(match ? match[0] : cleanJson);
-        } catch(e) {
-            aiJson = { tool: "none", speak: fullContent.substring(0, 300), open: null };
-        }
+        if (!response.ok) throw new Error(`API Error ${response.status}`);
+        const data = await response.json();
+        let aiRaw = data.choices[0].message.content;
+        aiRaw = aiRaw.replace(/```json/g, '').replace(/```/g, '').trim();
+        let aiJson = null;
+        const match = aiRaw.match(/\{[\s\S]*\}/);
+        if (match) try { aiJson = JSON.parse(match[0]); } catch(e) {}
+        if (!aiJson) aiJson = { tool: "none", speak: aiRaw.substring(0, 400), open: null };
 
         const validTools = ['weather', 'news', 'youtube', 'wikipedia', 'google', 'open_site', 'none'];
         if (!validTools.includes(aiJson.tool)) aiJson.tool = 'none';
 
-        // Auto-fill URLs
-        if (aiJson.tool === 'youtube' && aiJson.query) {
-            aiJson.open = `https://www.youtube.com/results?search_query=${encodeURIComponent(aiJson.query)}`;
-        } else if (aiJson.tool === 'wikipedia' && aiJson.query) {
-            aiJson.open = `https://en.wikipedia.org/wiki/${encodeURIComponent(aiJson.query.replace(/ /g, '_'))}`;
-        } else if (aiJson.tool === 'google' && aiJson.query) {
-            aiJson.open = `https://www.google.com/search?q=${encodeURIComponent(aiJson.query)}`;
-        } else if (aiJson.tool === 'open_site' && aiJson.query) {
+        if (aiJson.tool === 'youtube' && aiJson.query) aiJson.open = `https://www.youtube.com/results?search_query=${encodeURIComponent(aiJson.query)}`;
+        else if (aiJson.tool === 'wikipedia' && aiJson.query) aiJson.open = `https://en.wikipedia.org/wiki/${encodeURIComponent(aiJson.query.replace(/ /g, '_'))}`;
+        else if (aiJson.tool === 'google' && aiJson.query) aiJson.open = `https://www.google.com/search?q=${encodeURIComponent(aiJson.query)}`;
+        else if (aiJson.tool === 'open_site' && aiJson.query) {
             const siteKey = aiJson.query.toLowerCase().trim();
             aiJson.open = siteMap[siteKey] || `https://www.google.com/search?q=${encodeURIComponent(siteKey)}`;
-            if (!siteMap[siteKey] && !aiJson.speak) aiJson.speak = `I couldn't find a direct link, so I searched Google for "${siteKey}".`;
+            if (!siteMap[siteKey] && !aiJson.speak) aiJson.speak = `Searching Google for "${siteKey}".`;
         } else if (aiJson.tool === 'weather' && !aiJson.open) aiJson.open = "https://windy.com";
         else if (aiJson.tool === 'news' && !aiJson.open) aiJson.open = "https://reuters.com";
 
-        if (aiJson.tool !== 'none') {
-            await executeToolCommand(aiJson);
-        } else {
-            const reply = aiJson.speak || "I'm here. Ask me anything.";
-            addMessage(reply, false);
-            speakText(reply);
+        if (aiJson.tool !== 'none') await executeToolCommand(aiJson);
+        else {
+            let replyText = aiJson.speak;
+            if (!replyText || replyText.length < 2) replyText = "I'm not sure how to answer that.";
+            addMessage(replyText, false);
+            speakText(replyText);
         }
-
     } catch (error) {
-        if (error.name !== 'AbortError') {
-            console.error(error);
-            addSystemMessage(`❌ AI error: ${error.message}.`, true);
-            speakText("Sorry, I encountered an error.");
-        }
+        console.error(error);
+        addSystemMessage(`❌ Error: ${error.message}.`, true);
+        speakText("I encountered an error. Please try again.");
     } finally {
         thinkingIndicator.classList.remove('active');
-        abortController = null;
     }
 }
 
-// ---------- Voice Recognition with Stable Auto-restart ----------
+// ---------- Voice Recognition ----------
 function initSpeechRecognition() {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
         addSystemMessage("❌ Voice recognition not supported.", true);
@@ -367,15 +416,12 @@ function initSpeechRecognition() {
         soundWave.classList.remove('active');
         voiceStatusSpan.innerText = "";
         aiOrb.style.boxShadow = "0 0 20px cyan";
-        // Stable continuous mode: auto-restart if enabled and not speaking
-        if (continuousMode && !isSpeaking && !pendingRestart) {
+        if (continuousMode && !isSpeaking && !pendingRestart && !userInput.value.trim()) {
             pendingRestart = true;
             setTimeout(() => {
-                if (continuousMode && !isListening && !isSpeaking && !userInput.value.trim()) {
-                    try { recog.start(); } catch(e) {}
-                }
+                if (continuousMode && !isListening && !isSpeaking) try { recog.start(); } catch(e) {}
                 pendingRestart = false;
-            }, 400);
+            }, 500);
         }
     };
     recog.onresult = (event) => {
@@ -386,7 +432,6 @@ function initSpeechRecognition() {
         processUserInput(transcript);
     };
     recog.onerror = (e) => {
-        console.warn("Speech error", e);
         voiceStatusSpan.innerText = `🎙️ ${e.error}`;
         setTimeout(() => voiceStatusSpan.innerText = "", 1500);
         micBtn.classList.remove('listening');
@@ -397,10 +442,7 @@ function initSpeechRecognition() {
 }
 
 function startListening() {
-    if (isSpeaking) {
-        addSystemMessage("Zara is speaking, please wait...", false);
-        return;
-    }
+    if (isSpeaking) { addSystemMessage("Zara is speaking, please wait...", false); return; }
     if (!recognition) recognition = initSpeechRecognition();
     if (!recognition) return;
     if (isListening) recognition.stop();
@@ -418,11 +460,7 @@ async function processUserInput(text) {
 sendBtn.addEventListener('click', () => processUserInput(userInput.value));
 userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') processUserInput(userInput.value); });
 micBtn.addEventListener('click', startListening);
-continuousModeToggle.addEventListener('change', (e) => {
-    continuousMode = e.target.checked;
-    if (!continuousMode && isListening) recognition?.stop();
-    addSystemMessage(`Continuous mode ${continuousMode ? 'enabled' : 'disabled'}.`, false);
-});
+continuousModeToggle.addEventListener('change', (e) => { continuousMode = e.target.checked; if (!continuousMode && isListening) recognition?.stop(); addSystemMessage(`Continuous mode ${continuousMode ? 'enabled' : 'disabled'}.`, false); });
 saveApiKeyBtn.addEventListener('click', () => {
     let newKey = apiKeyInput.value.trim();
     if (!newKey) { addSystemMessage("❌ Empty key.", true); return; }
@@ -433,7 +471,6 @@ saveApiKeyBtn.addEventListener('click', () => {
     speakText("Key saved.");
 });
 
-// Load history without duplication
 function loadChatHistory() {
     let history = JSON.parse(localStorage.getItem('zara_chat_history') || '[]');
     if (!history.length) return;
@@ -445,6 +482,6 @@ function loadChatHistory() {
 loadChatHistory();
 
 setTimeout(() => {
-    if (openRouterApiKey) speakText("Zara ready. Continuous listening active.");
+    if (openRouterApiKey) speakText(`Zara ready. Hello ${zaraMemory.name}.`);
     else speakText("Please set your API key.");
 }, 800);
