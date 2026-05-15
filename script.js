@@ -1,26 +1,23 @@
 // script.js
 
-let currentData = [];  // stores the loaded stocks
+let currentData = [];
 
 const container = document.getElementById("stockContainer");
 const sortSelect = document.getElementById("sortSelect");
 const refreshBtn = document.getElementById("refreshBtn");
 const updateBar = document.getElementById("updateBar");
 
-// Helper: get percentage position for a value between min and max (clamped)
 function getPosition(value, minVal, maxVal) {
     if (maxVal === minVal) return 50;
     let pct = ((value - minVal) / (maxVal - minVal)) * 100;
     return Math.min(100, Math.max(0, pct));
 }
 
-// Create a single stock card
 function createCard(stock) {
     const positive = stock.change >= 0;
     const card = document.createElement("div");
     card.className = "stock-card";
 
-    // ---- EMA Structure positions (based on actual values) ----
     const values = [stock.price, stock.ema20, stock.ema50, stock.ema100, stock.ema200];
     const minVal = Math.min(...values);
     const maxVal = Math.max(...values);
@@ -30,7 +27,6 @@ function createCard(stock) {
     const pos100 = getPosition(stock.ema100, minVal, maxVal);
     const pos200 = getPosition(stock.ema200, minVal, maxVal);
 
-    // ---- Day Range position (price between low and high) ----
     let rangePos = 50;
     if (stock.high !== stock.low) {
         rangePos = ((stock.price - stock.low) / (stock.high - stock.low)) * 100;
@@ -84,7 +80,6 @@ function createCard(stock) {
     return card;
 }
 
-// Render all cards based on currentData
 function renderCards() {
     container.innerHTML = "";
     currentData.forEach(stock => {
@@ -92,28 +87,25 @@ function renderCards() {
     });
 }
 
-// Sorting function
 function sortData(criterion) {
     if (criterion === "score") {
         currentData.sort((a, b) => b.score - a.score);
-    } else if (criterion === "price") {
-        currentData.sort((a, b) => b.price - a.price);
+    } else if (criterion === "change") {
+        currentData.sort((a, b) => b.change - a.change);
     } else if (criterion === "symbol") {
         currentData.sort((a, b) => a.symbol.localeCompare(b.symbol));
     }
     renderCards();
 }
 
-// Load data from data/results.json
 async function loadData() {
     try {
         updateBar.innerText = "● Last update: Loading...";
-        const response = await fetch("data/results.json?" + Date.now()); // cache buster
+        const response = await fetch("data/results.json?" + Date.now());
         if (!response.ok) throw new Error("Failed to fetch data");
         const json = await response.json();
         currentData = json.data;
         updateBar.innerText = `● Last update: ${json.last_updated}`;
-        // Apply current sort selection
         const currentSort = sortSelect.value;
         sortData(currentSort);
     } catch (error) {
@@ -123,7 +115,6 @@ async function loadData() {
     }
 }
 
-// Event listeners
 sortSelect.addEventListener("change", (e) => {
     sortData(e.target.value);
 });
@@ -132,5 +123,4 @@ refreshBtn.addEventListener("click", () => {
     loadData();
 });
 
-// Initial load
 loadData();
