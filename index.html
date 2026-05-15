@@ -5,7 +5,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Technical Lens</title>
-
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -19,18 +18,17 @@
     </div>
 
     <div class="top-controls">
-      <select>
-        <option>Trend Strength</option>
-        <option>Price High → Low</option>
-        <option>Name A-Z</option>
+      <select id="sortSelect">
+        <option value="score">Trend Strength</option>
+        <option value="price">Price High → Low</option>
+        <option value="symbol">Name A-Z</option>
       </select>
-
-      <button>Refresh</button>
+      <button id="refreshBtn">Refresh</button>
     </div>
   </header>
 
-  <div class="update-bar">
-    ● Last update: 01 Jun 2025, 10:45 AM
+  <div class="update-bar" id="updateBar">
+    ● Last update: Loading...
   </div>
 
   <div id="stockContainer"></div>
