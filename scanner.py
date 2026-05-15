@@ -1,6 +1,6 @@
 """
 NSE Nifty 500 Trend Strength Scanner
-Uses nsepython (direct NSE India API) – no API key, works in GitHub Actions.
+Fetches latest Nifty 500 list from yfinance, then downloads bhavcopy data.
 """
 
 import json
@@ -8,27 +8,28 @@ import time
 import logging
 import sys
 import os
+import requests
+import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
-import pandas as pd
 from tqdm import tqdm
+import yfinance as yf
 
 # ==================== CONFIGURATION ====================
 SYMBOLS_FILE = "nifty500.txt"
 OUTPUT_FILE = "data/results.json"
 YEARS_OF_DATA = 3
-REQUEST_DELAY = 0.5       # seconds between stocks (avoid rate limits)
+REQUEST_DELAY = 0.3
+MAX_RETRIES = 3
 
-# Scoring weights for the trend strength score
 WEIGHTS = {
-    "ema_separation": 0.20,      # EMA20 to EMA200 spread
-    "price_distance": 0.25,      # Distance from EMA20
-    "daily_gain": 0.20,          # Today's change percent
-    "relative_volume": 0.15,     # Volume vs 20-day average
-    "momentum": 0.20              # 5-day price momentum
+    "ema_separation": 0.20,
+    "price_distance": 0.25,
+    "daily_gain": 0.20,
+    "relative_volume": 0.15,
+    "momentum": 0.20
 }
 
-# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -36,77 +37,126 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-def load_symbols(file_path: str) -> List[str]:
-    """Load NSE symbols from text file (one per line)."""
+# ==================== FETCH COMPLETE NIFTY 500 LIST ====================
+def fetch_nifty500_symbols_from_yfinance():
+    """Fetch all Nifty 500 symbols using yfinance."""
     try:
-        with open(file_path, 'r') as f:
-            symbols = [line.strip().upper() for line in f if line.strip()]
-        logger.info(f"Loaded {len(symbols)} symbols from {file_path}")
-        return symbols
-    except FileNotFoundError:
-        logger.error(f"Symbol file {file_path} not found!")
-        return []
-
-
-def fetch_stock_data(symbol: str, years: int = 3) -> Optional[pd.DataFrame]:
-    """
-    Fetch daily OHLCV data using nsepython.
-    Directly calls NSE India's historical data API.
-    """
-    try:
-        from nsepython import nse_eq_history
+        # Fetch NIFTY 500 index constituents from Yahoo Finance
+        nifty500 = yf.Ticker("^NSEI")
+        # Get the holdings/constituents
+        holdings = nifty500.info.get('holdings', [])
         
-        # Date range: last 3 years + a buffer for holidays
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=years*365 + 30)
+        if holdings:
+            symbols = [h['symbol'].replace('.NS', '') for h in holdings if 'symbol' in h]
+            if symbols:
+                with open(SYMBOLS_FILE, 'w') as f:
+                    f.write("\n".join(symbols))
+                logger.info(f"Fetched {len(symbols)} Nifty 500 symbols from yfinance")
+                return symbols
         
-        from_date_str = start_date.strftime("%d-%m-%Y")
-        to_date_str = end_date.strftime("%d-%m-%Y")
-        
-        # Fetch data from NSE
-        data = nse_eq_history(symbol, from_date_str, to_date_str, series="EQ")
-        
-        if not data or len(data) == 0:
-            logger.warning(f"{symbol}: No data returned from NSE")
-            return None
-        
-        # Convert to DataFrame
-        df = pd.DataFrame.from_dict(data, orient='index')
-        df.index = pd.to_datetime(df.index)
-        df.sort_index(inplace=True)
-        
-        # Rename columns to standard names
-        df = df.rename(columns={
-            'OPEN': 'Open',
-            'HIGH': 'High',
-            'LOW': 'Low',
-            'CLOSE': 'Close',
-            'VOLUME': 'Volume'
-        })
-        
-        # Keep only OHLCV columns
-        df = df[['Open', 'High', 'Low', 'Close', 'Volume']].copy()
-        
-        # Convert to numeric values
-        for col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-        
-        # Drop rows with missing data
-        df.dropna(subset=['Close'], inplace=True)
-        
-        # Need at least 200 trading days for EMA200 calculation
-        if len(df) < 200:
-            logger.warning(f"{symbol}: Only {len(df)} days, need 200+")
-            return None
-        
-        return df
+        # Fallback: known good symbols from NIFTY 50 if constituents fetch fails
+        fallback_symbols = [
+            "RELIANCE", "TCS", "HDFCBANK", "INFY", "HINDUNILVR", "ICICIBANK", "KOTAKBANK",
+            "SBIN", "BHARTIARTL", "ITC", "AXISBANK", "LT", "WIPRO", "HCLTECH", "SUNPHARMA",
+            "BAJFINANCE", "NTPC", "ONGC", "MARUTI", "TITAN", "ASIANPAINT", "ULTRACEMCO",
+            "POWERGRID", "NESTLE", "M&M", "TECHM", "JSWSTEEL", "BAJAJFINSV", "ADANIPORTS",
+            "ADANIENT", "BAJAJ-AUTO", "COALINDIA", "DIVISLAB", "DRREDDY", "EICHERMOT",
+            "GRASIM", "HDFCLIFE", "HEROMOTOCO", "HINDALCO", "INDUSINDBK", "LTIM",
+            "MCDOWELL-N", "SBILIFE", "SHREECEM", "TATACONSUM", "TATAMOTORS", "TATASTEEL", "UPL"
+        ]
+        logger.warning("Could not fetch Nifty 500 symbols, using fallback list of 50 stocks")
+        with open(SYMBOLS_FILE, 'w') as f:
+            f.write("\n".join(fallback_symbols))
+        return fallback_symbols
         
     except Exception as e:
-        logger.warning(f"{symbol}: nsepython error - {str(e)[:100]}")
+        logger.error(f"Failed to fetch symbols: {e}")
+        return []
+
+def load_symbols() -> List[str]:
+    """Load symbols from nifty500.txt, fetch from yfinance if missing."""
+    if not os.path.exists(SYMBOLS_FILE):
+        logger.info("nifty500.txt not found, fetching from yfinance...")
+        symbols = fetch_nifty500_symbols_from_yfinance()
+        if symbols:
+            return symbols
+        else:
+            # Final fallback: hardcoded NIFTY 50 symbols
+            fallback = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "HINDUNILVR", "ICICIBANK"]
+            with open(SYMBOLS_FILE, 'w') as f:
+                f.write("\n".join(fallback))
+            return fallback
+    
+    with open(SYMBOLS_FILE, 'r') as f:
+        symbols = [line.strip().upper() for line in f if line.strip()]
+    logger.info(f"Loaded {len(symbols)} symbols from {SYMBOLS_FILE}")
+    return symbols
+
+# ==================== BHAVCOPY DOWNLOADER ====================
+def get_all_bhavcopy_dates(years: int = 3):
+    """Generate list of dates with bhavcopy files."""
+    dates = []
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=years*365)
+    
+    current = start_date
+    while current <= end_date:
+        if current.weekday() < 5:  # Monday=0, Friday=4
+            dates.append(current)
+        current += timedelta(days=1)
+    return dates
+
+def download_bhavcopy_for_date(date_obj):
+    """Download bhavcopy CSV for a specific date from NSE."""
+    try:
+        date_str = date_obj.strftime("%d%m%Y")
+        url = f"https://archives.nseindia.com/content/historical/EQUITIES/{date_obj.year}/{date_obj.strftime('%b').upper()}/cm{date_str}bhav.csv.zip"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            with open("temp.zip", "wb") as f:
+                f.write(response.content)
+            df = pd.read_csv("temp.zip")
+            os.remove("temp.zip")
+            return df
+        return None
+    except Exception as e:
         return None
 
+def fetch_stock_data(symbol: str) -> Optional[pd.DataFrame]:
+    """Fetch daily data by downloading bhavcopy files."""
+    dates = get_all_bhavcopy_dates(YEARS_OF_DATA)
+    all_data = []
+    
+    for date in tqdm(dates, desc=f"Downloading bhavcopy for {symbol}", leave=False):
+        df = download_bhavcopy_for_date(date)
+        if df is not None:
+            stock_row = df[df['SYMBOL'] == symbol]
+            if not stock_row.empty:
+                row = stock_row.iloc[0]
+                all_data.append({
+                    'Date': date,
+                    'Open': row['OPEN'],
+                    'High': row['HIGH'],
+                    'Low': row['LOW'],
+                    'Close': row['CLOSE'],
+                    'Volume': row['TOTTRDQTY']
+                })
+        time.sleep(0.2)
+    
+    if not all_data:
+        return None
+    
+    final_df = pd.DataFrame(all_data)
+    final_df.set_index('Date', inplace=True)
+    final_df.sort_index(inplace=True)
+    
+    if len(final_df) < 200:
+        logger.warning(f"{symbol}: Only {len(final_df)} days, need 200+")
+        return None
+    
+    return final_df
 
+# ==================== EMA AND METRICS CALCULATION ====================
 def calculate_emas(df: pd.DataFrame) -> pd.DataFrame:
     """Calculate EMAs 20, 50, 100, 200."""
     df = df.copy()
@@ -115,7 +165,6 @@ def calculate_emas(df: pd.DataFrame) -> pd.DataFrame:
     df['EMA100'] = df['Close'].ewm(span=100, adjust=False).mean()
     df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
     return df
-
 
 def compute_metrics(df: pd.DataFrame, symbol: str) -> Optional[Dict]:
     """Extract latest metrics and compute trend indicators."""
@@ -126,40 +175,30 @@ def compute_metrics(df: pd.DataFrame, symbol: str) -> Optional[Dict]:
         df = calculate_emas(df)
         latest = df.iloc[-1]
         
-        # Ensure all required EMAs are present
         required_cols = ['EMA20', 'EMA50', 'EMA100', 'EMA200']
         if any(pd.isna(latest[col]) for col in required_cols):
-            logger.debug(f"{symbol}: Missing EMA values")
             return None
         
-        # Daily gain percent
         prev_close = df['Close'].iloc[-2] if len(df) > 1 else latest['Close']
         daily_gain_pct = ((latest['Close'] - prev_close) / prev_close) * 100
         
-        # Relative volume (20-day average vs today)
         vol_series = df['Volume'].iloc[-21:-1]
         avg_volume_20 = vol_series.mean() if len(vol_series) >= 10 else latest['Volume']
         rel_volume = latest['Volume'] / avg_volume_20 if avg_volume_20 > 0 else 1.0
         
-        # EMA separation as percent of EMA200
         ema_sep_pct = ((latest['EMA20'] - latest['EMA200']) / latest['EMA200']) * 100
-        
-        # Price distance from EMA20 as percent
         price_dist_pct = ((latest['Close'] - latest['EMA20']) / latest['EMA20']) * 100
         
-        # 5-day momentum
         if len(df) >= 6:
             close_5d_ago = df['Close'].iloc[-6]
             momentum_pct = ((latest['Close'] - close_5d_ago) / close_5d_ago) * 100
         else:
             momentum_pct = daily_gain_pct
         
-        # Bullish alignment: Price > EMA20 > EMA50 > EMA100 > EMA200
         is_bullish = (
             latest['Close'] > latest['EMA20'] > latest['EMA50'] > latest['EMA100'] > latest['EMA200']
         )
         
-        # Safely convert volume to integer
         volume_int = int(latest['Volume']) if not pd.isna(latest['Volume']) else 0
         
         return {
@@ -181,9 +220,8 @@ def compute_metrics(df: pd.DataFrame, symbol: str) -> Optional[Dict]:
         logger.error(f"{symbol}: compute_metrics error - {str(e)}")
         return None
 
-
 def normalize_metric(values: List[float]) -> List[float]:
-    """Normalize metrics to 0-1 scale while clipping outliers."""
+    """Min-max normalization with outlier clipping."""
     if not values or len(values) < 2:
         return [0.5] * len(values)
     
@@ -197,13 +235,11 @@ def normalize_metric(values: List[float]) -> List[float]:
     normalized = [(v - lower) / (upper - lower) for v in values]
     return [max(0.0, min(1.0, n)) for n in normalized]
 
-
 def calculate_trend_scores(stocks_data: List[Dict]) -> List[Dict]:
-    """Add normalized trend strength score (0-100) to each stock."""
+    """Add normalized trend strength score (0-100)."""
     if not stocks_data:
         return []
     
-    # Collect all metrics for normalization
     metrics = {
         "ema_sep_pct": [],
         "price_dist_pct": [],
@@ -216,12 +252,10 @@ def calculate_trend_scores(stocks_data: List[Dict]) -> List[Dict]:
         for key in metrics.keys():
             metrics[key].append(stock.get(key, 0))
     
-    # Normalize each metric
     normalized_metrics = {}
     for key, values in metrics.items():
         normalized_metrics[key] = normalize_metric(values)
     
-    # Calculate weighted score for each stock
     for idx, stock in enumerate(stocks_data):
         score = 0.0
         for metric, weight in WEIGHTS.items():
@@ -229,7 +263,6 @@ def calculate_trend_scores(stocks_data: List[Dict]) -> List[Dict]:
         
         stock["trend_score"] = round(score * 100, 1)
         
-        # Classify trend status
         if stock.get("is_bullish_aligned", False) and stock["trend_score"] >= 60:
             stock["status"] = "Strong Bullish"
             stock["color"] = "green"
@@ -243,21 +276,19 @@ def calculate_trend_scores(stocks_data: List[Dict]) -> List[Dict]:
             stock["status"] = "Weak"
             stock["color"] = "red"
     
-    # Sort by trend score and assign ranks
     stocks_data.sort(key=lambda x: x["trend_score"], reverse=True)
     for rank, stock in enumerate(stocks_data, 1):
         stock["rank"] = rank
     
     return stocks_data
 
-
 def run_scanner():
-    """Main execution entry point."""
+    """Main execution."""
     start_time = datetime.now()
-    logger.info("=== NSE Nifty 500 Trend Strength Scanner (nsepython) ===")
+    logger.info("=== NSE Nifty 500 Trend Strength Scanner (Bhavcopy Direct) ===")
     
-    # Load symbols from file
-    symbols = load_symbols(SYMBOLS_FILE)
+    # Load or fetch symbols
+    symbols = load_symbols()
     if not symbols:
         logger.error("No symbols loaded. Exiting.")
         sys.exit(1)
@@ -265,12 +296,9 @@ def run_scanner():
     all_stocks = []
     failed_symbols = []
     
-    # Process each symbol
-    for symbol in tqdm(symbols, desc="Scanning Nifty 500"):
-        time.sleep(REQUEST_DELAY)  # Rate limiting
-        
-        # Fetch and process stock data
-        df = fetch_stock_data(symbol, years=YEARS_OF_DATA)
+    for symbol in tqdm(symbols, desc="Scanning stocks"):
+        time.sleep(REQUEST_DELAY)
+        df = fetch_stock_data(symbol)
         if df is None:
             failed_symbols.append(symbol)
             continue
@@ -281,7 +309,6 @@ def run_scanner():
         else:
             failed_symbols.append(symbol)
     
-    # Log summary
     logger.info(f"Successfully processed: {len(all_stocks)} stocks")
     logger.info(f"Failed: {len(failed_symbols)} stocks")
     
@@ -289,11 +316,9 @@ def run_scanner():
         logger.error("No valid stock data. Exiting.")
         sys.exit(1)
     
-    # Calculate trend scores and rank
     ranked_stocks = calculate_trend_scores(all_stocks)
     bullish_count = sum(1 for s in ranked_stocks if s.get("is_bullish_aligned", False))
     
-    # Prepare output JSON
     output = {
         "last_updated": datetime.now().isoformat(),
         "last_updated_readable": datetime.now().strftime("%Y-%m-%d %H:%M:%S IST"),
@@ -305,7 +330,6 @@ def run_scanner():
         "stocks": ranked_stocks
     }
     
-    # Save to file
     os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
     with open(OUTPUT_FILE, 'w') as f:
         json.dump(output, f, indent=2)
@@ -314,14 +338,13 @@ def run_scanner():
     if ranked_stocks:
         logger.info(f"Top 5 stocks: {[s['symbol'] for s in ranked_stocks[:5]]}")
     
-    # Print final summary
     print("\n" + "="*50)
     print("SCAN COMPLETE")
     print(f"Total scanned: {len(ranked_stocks)}")
     print(f"Bullish aligned: {bullish_count}")
-    print(f"Avg trend score: {sum(s['trend_score'] for s in ranked_stocks)/len(ranked_stocks):.1f}")
+    if ranked_stocks:
+        print(f"Avg trend score: {sum(s['trend_score'] for s in ranked_stocks)/len(ranked_stocks):.1f}")
     print("="*50)
-
 
 if __name__ == "__main__":
     run_scanner()
