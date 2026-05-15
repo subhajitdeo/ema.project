@@ -1,41 +1,620 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Fintech Flow | EMA + Range Visualizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0">
+        body {
+            background: #0A0C14;
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, sans-serif;
+            padding: 20px 16px;
+            color: #EFF3FC;
+        }
 
-    <title>EMA Scanner</title>
+        /* modern scroll */
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1E2436;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3b4b6e;
+            border-radius: 10px;
+        }
 
-    <link rel="stylesheet" href="style.css">
+        .container {
+            max-width: 860px;
+            margin: 0 auto;
+        }
 
+        /* header panel */
+        .dashboard-header {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 16px;
+            margin-bottom: 28px;
+            background: #0F121C;
+            padding: 16px 20px;
+            border-radius: 32px;
+            border: 1px solid #252E3F;
+            backdrop-filter: blur(2px);
+        }
+
+        .title-section h1 {
+            font-size: 1.7rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #E2E8F0 0%, #A5F3C3 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            letter-spacing: -0.3px;
+        }
+
+        .title-section p {
+            font-size: 0.75rem;
+            color: #8A99B4;
+            margin-top: 4px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        select, .refresh-btn {
+            background: #111827;
+            border: 1px solid #2D3748;
+            padding: 8px 18px;
+            border-radius: 40px;
+            font-weight: 500;
+            font-size: 0.85rem;
+            color: #E2E8F0;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+
+        select:hover, .refresh-btn:hover {
+            background: #1E2A3A;
+            border-color: #4B6A9B;
+            transform: translateY(-1px);
+        }
+
+        .refresh-btn {
+            background: #1F2A3E;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .refresh-btn:active {
+            transform: scale(0.97);
+        }
+
+        #lastUpdated {
+            font-size: 0.7rem;
+            color: #6C7A91;
+            text-align: right;
+            margin-top: 6px;
+            margin-bottom: 20px;
+        }
+
+        /* stock card */
+        .stock-card {
+            background: #10131F;
+            border-radius: 28px;
+            margin-bottom: 20px;
+            border: 1px solid #232A3F;
+            transition: all 0.25s ease;
+            box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.5);
+        }
+
+        .stock-card:hover {
+            border-color: #3A4A6E;
+            transform: translateY(-2px);
+            background: #12162A;
+            box-shadow: 0 18px 28px -12px rgba(0, 0, 0, 0.6);
+        }
+
+        .card-main {
+            padding: 18px 20px 12px 20px;
+        }
+
+        .stock-identity {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        .name-area h2 {
+            font-size: 1.45rem;
+            font-weight: 600;
+            letter-spacing: -0.2px;
+            color: #F1F5F9;
+        }
+
+        .price-block {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 6px;
+        }
+
+        .current-price {
+            font-size: 1.7rem;
+            font-weight: 700;
+            color: #FACC15;
+        }
+
+        .change-badge {
+            font-size: 0.85rem;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 40px;
+            background: rgba(0,0,0,0.4);
+        }
+
+        .positive {
+            color: #2CE89D;
+            background: rgba(44, 232, 157, 0.12);
+        }
+
+        .negative {
+            color: #FF7B72;
+            background: rgba(255, 92, 80, 0.12);
+        }
+
+        /* LEGEND (compact inside card) */
+        .ma-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin: 14px 0 12px 0;
+            padding: 10px 0 4px 0;
+            border-top: 1px solid #202838;
+            font-size: 0.7rem;
+        }
+
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: #0B0E18;
+            padding: 4px 12px;
+            border-radius: 28px;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        /* Technical horizontal axis */
+        .viz-section {
+            margin: 16px 0 12px 0;
+        }
+
+        .viz-title {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            color: #8D9BBD;
+            margin-bottom: 16px;
+        }
+
+        .level-axis {
+            position: relative;
+            margin: 28px 0 30px 0;
+            padding: 0 6px;
+        }
+
+        .axis-line {
+            position: absolute;
+            top: 22px;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: #2E3A55;
+            border-radius: 10px;
+            z-index: 1;
+        }
+
+        .marker-container {
+            position: relative;
+            width: 100%;
+            min-height: 55px;
+        }
+
+        .circle-marker {
+            position: absolute;
+            border-radius: 50%;
+            transform: translateX(-50%);
+            cursor: pointer;
+            transition: transform 0.1s ease, filter 0.2s;
+            z-index: 10;
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.4);
+        }
+
+        .circle-marker:hover {
+            transform: translateX(-50%) scale(1.2);
+            filter: brightness(1.1);
+            z-index: 20;
+        }
+
+        .price-triangle {
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 12px solid #FACC15;
+            transform: translateX(-50%);
+            filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));
+            cursor: default;
+            z-index: 12;
+        }
+
+        /* day range specific */
+        .dayrange-wrapper {
+            margin-top: 28px;
+            margin-bottom: 12px;
+        }
+
+        .dual-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: #9EAFCF;
+            margin-top: 8px;
+        }
+
+        /* colors mapping */
+        .ema20-color { background: #F97316; } /* orange */
+        .ema50-color { background: #B45309; } /* brown-gray */
+        .ema100-color { background: #10B981; } /* green */
+        .ema200-color { background: #A855F7; } /* purple */
+        .day-low-color { background: #5B6E9C; }
+        .day-high-color { background: #FACC15; }
+
+        /* sizes */
+        .size-xs { width: 12px; height: 12px; }
+        .size-sm { width: 16px; height: 16px; }
+        .size-md { width: 22px; height: 22px; }
+        .size-lg { width: 28px; height: 28px; }
+
+        .day-marker { width: 16px; height: 16px; background: #7889b0; border-radius: 50%; }
+
+        /* responsiveness */
+        @media (max-width: 560px) {
+            body { padding: 12px; }
+            .current-price { font-size: 1.3rem; }
+            .stock-identity { flex-direction: column; gap: 8px; }
+            .legend-item { padding: 2px 8px; font-size: 0.65rem; }
+            .circle-marker { border: 1px solid rgba(0,0,0,0.3); }
+        }
+
+        .footnote {
+            text-align: center;
+            font-size: 0.7rem;
+            margin-top: 30px;
+            color: #4C5A78;
+        }
+    </style>
 </head>
-
 <body>
-
-    <div class="container">
-
-        <div class="header">
-
-            <h1>NSE EMA Scanner</h1>
-
-            <button onclick="loadData()">
-                Refresh
-            </button>
-
+<div class="container">
+    <div class="dashboard-header">
+        <div class="title-section">
+            <h1>⚡ Technical Lens</h1>
+            <p>EMA structure · Range position · Trend strength</p>
         </div>
-
-        <div id="lastUpdated"></div>
-
-        <div id="stockList"></div>
-
+        <div class="controls">
+            <select id="sortSelect">
+                <option value="trend">📈 Trend (200<100<50<20<LTP)</option>
+                <option value="name">🔤 Symbol A-Z</option>
+                <option value="priceDown">💰 Price High to Low</option>
+            </select>
+            <button class="refresh-btn" id="refreshBtn">⟳ Refresh Data</button>
+        </div>
     </div>
+    <div id="lastUpdated">✨ Last update: just now</div>
+    <div id="stockList"></div>
+    <div class="footnote">↺ Hover circles → tooltip shows value · Triangle = current price</div>
+</div>
 
-    <script src="script.js"></script>
+<script>
+    // ---------- MOCK DATA (realistic fintech dataset) ----------
+    const rawStocks = [
+        { symbol: "RELIANCE", price: 2520.40, changePercent: 1.82, ema20: 2512.3, ema50: 2493.7, ema100: 2458.2, ema200: 2405.9, dayLow: 2420.0, dayHigh: 2545.0 },
+        { symbol: "TCS", price: 3650.00, changePercent: -0.72, ema20: 3672.5, ema50: 3661.8, ema100: 3625.4, ema200: 3580.2, dayLow: 3605.0, dayHigh: 3705.0 },
+        { symbol: "HDFCBANK", price: 1683.55, changePercent: 1.45, ema20: 1677.2, ema50: 1662.9, ema100: 1643.0, ema200: 1621.3, dayLow: 1630.0, dayHigh: 1698.0 },
+        { symbol: "INFY", price: 1552.30, changePercent: 0.94, ema20: 1547.8, ema50: 1541.4, ema100: 1523.6, ema200: 1502.1, dayLow: 1505.0, dayHigh: 1568.0 },
+        { symbol: "ITC", price: 431.25, changePercent: 0.53, ema20: 429.1, ema50: 427.3, ema100: 421.8, ema200: 416.5, dayLow: 414.5, dayHigh: 435.0 },
+        { symbol: "HINDUNILVR", price: 2672.90, changePercent: 0.68, ema20: 2667.5, ema50: 2661.2, ema100: 2648.9, ema200: 2630.4, dayLow: 2628.0, dayHigh: 2689.0 },
+        { symbol: "BHARTIARTL", price: 1225.80, changePercent: 2.15, ema20: 1218.4, ema50: 1205.7, ema100: 1182.3, ema200: 1150.6, dayLow: 1145.0, dayHigh: 1235.0 },
+        { symbol: "WIPRO", price: 542.30, changePercent: -1.22, ema20: 548.2, ema50: 546.0, ema100: 538.7, ema200: 530.1, dayLow: 530.0, dayHigh: 555.0 }
+    ];
 
+    // helper: compute trend strength (count of 200<100<50<20<price)
+    function getTrendScore(stock) {
+        let score = 0;
+        if (stock.ema200 < stock.ema100) score++;
+        if (stock.ema100 < stock.ema50) score++;
+        if (stock.ema50 < stock.ema20) score++;
+        if (stock.ema20 < stock.price) score++;
+        return score;
+    }
+
+    // sorting logic
+    function sortStocks(stocks, criteria) {
+        const arr = [...stocks];
+        if (criteria === "trend") {
+            arr.sort((a,b) => {
+                const scoreA = getTrendScore(a);
+                const scoreB = getTrendScore(b);
+                if (scoreA !== scoreB) return scoreB - scoreA;
+                // tie-breaker: additional price above 20 EMA
+                return (b.price - b.ema20) - (a.price - a.ema20);
+            });
+        } else if (criteria === "name") {
+            arr.sort((a,b) => a.symbol.localeCompare(b.symbol));
+        } else if (criteria === "priceDown") {
+            arr.sort((a,b) => b.price - a.price);
+        }
+        return arr;
+    }
+
+    // compute min & max for EMA + price range (technical axis)
+    function getMinMaxForTech(stock) {
+        const values = [stock.price, stock.ema20, stock.ema50, stock.ema100, stock.ema200];
+        const minVal = Math.min(...values);
+        const maxVal = Math.max(...values);
+        const range = maxVal - minVal;
+        return { minVal, maxVal, range: range === 0 ? 1 : range };
+    }
+
+    // get left % position (0-100)
+    function getPositionPercent(value, minVal, rangeVal) {
+        return ((value - minVal) / rangeVal) * 100;
+    }
+
+    // rendering function
+    function renderDashboard(stocksArray, sortKey, updateTime = true) {
+        const container = document.getElementById("stockList");
+        if (!container) return;
+        const sorted = sortStocks(stocksArray, sortKey);
+        container.innerHTML = "";
+
+        if (updateTime) {
+            const now = new Date();
+            document.getElementById("lastUpdated").innerHTML = `🕒 Last update: ${now.toLocaleTimeString()} · ${sorted.length} stocks active`;
+        }
+
+        for (const stock of sorted) {
+            const { minVal, maxVal, range: techRange } = getMinMaxForTech(stock);
+            const pricePos = getPositionPercent(stock.price, minVal, techRange);
+            const ema20Pos = getPositionPercent(stock.ema20, minVal, techRange);
+            const ema50Pos = getPositionPercent(stock.ema50, minVal, techRange);
+            const ema100Pos = getPositionPercent(stock.ema100, minVal, techRange);
+            const ema200Pos = getPositionPercent(stock.ema200, minVal, techRange);
+
+            // day range calculations
+            const dayLow = stock.dayLow;
+            const dayHigh = stock.dayHigh;
+            const dayRangeVal = dayHigh - dayLow;
+            const dayRangeNormalized = dayRangeVal === 0 ? 1 : dayRangeVal;
+            let priceDayPos = ((stock.price - dayLow) / dayRangeNormalized) * 100;
+            priceDayPos = Math.min(100, Math.max(0, priceDayPos));
+
+            // percentage change styling
+            const changeClass = stock.changePercent >= 0 ? "positive" : "negative";
+            const changeSign = stock.changePercent >= 0 ? `+${stock.changePercent.toFixed(2)}%` : `${stock.changePercent.toFixed(2)}%`;
+
+            // create card
+            const card = document.createElement("div");
+            card.className = "stock-card";
+
+            // inner html structure
+            card.innerHTML = `
+                <div class="card-main">
+                    <div class="stock-identity">
+                        <div class="name-area">
+                            <h2>${stock.symbol}</h2>
+                            <div class="price-block">
+                                <span class="current-price">₹${stock.price.toFixed(2)}</span>
+                                <span class="change-badge ${changeClass}">${changeSign}</span>
+                            </div>
+                        </div>
+                        <div class="trend-micro" style="font-size:0.7rem; background:#191E2F; padding:4px 8px; border-radius:20px;">
+                            ⚡ strength: ${getTrendScore(stock)}/4
+                        </div>
+                    </div>
+
+                    <!-- MA Legend (compact) -->
+                    <div class="ma-legend">
+                        <span class="legend-item"><span class="legend-dot ema20-color" style="background:#F97316;"></span> EMA20</span>
+                        <span class="legend-item"><span class="legend-dot ema50-color" style="background:#B45309;"></span> EMA50</span>
+                        <span class="legend-item"><span class="legend-dot ema100-color" style="background:#10B981;"></span> EMA100</span>
+                        <span class="legend-item"><span class="legend-dot ema200-color" style="background:#A855F7;"></span> EMA200</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:#FACC15;"></span> Price ▾</span>
+                    </div>
+
+                    <!-- TECHNICAL LEVELS LINE (moving averages visualization) -->
+                    <div class="viz-section">
+                        <div class="viz-title">📊 TECHNICAL LEVELS · EMA CLUSTER</div>
+                        <div class="level-axis">
+                            <div class="axis-line"></div>
+                            <div class="marker-container" id="tech-markers-${stock.symbol.replace(/[^a-zA-Z0-9]/g, '')}">
+                                <!-- dynamic markers will be injected via pure JS to keep perfect positions -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DAY RANGE REPRESENTATION -->
+                    <div class="viz-section dayrange-wrapper">
+                        <div class="viz-title">📅 DAILY RANGE · LOW ⇄ HIGH</div>
+                        <div class="level-axis" style="margin-bottom: 12px;">
+                            <div class="axis-line" style="background:#334155;"></div>
+                            <div class="marker-container" id="day-markers-${stock.symbol.replace(/[^a-zA-Z0-9]/g, '')}">
+                                <!-- day low, high, triangle injection -->
+                            </div>
+                        </div>
+                        <div class="dual-labels">
+                            <span>L: ₹${stock.dayLow.toFixed(2)}</span>
+                            <span>Current: ₹${stock.price.toFixed(2)}</span>
+                            <span>H: ₹${stock.dayHigh.toFixed(2)}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Append card before inserting markers
+            container.appendChild(card);
+
+            // Now insert technical markers
+            const techContainerId = `tech-markers-${stock.symbol.replace(/[^a-zA-Z0-9]/g, '')}`;
+            const techContainer = document.getElementById(techContainerId);
+            if (techContainer) {
+                techContainer.innerHTML = '';
+                // add EMA circles with custom sizes + tooltip via title
+                this.addCircle(techContainer, ema20Pos, 'ema20-color', 'size-xs', `EMA20: ₹${stock.ema20.toFixed(2)}`);
+                this.addCircle(techContainer, ema50Pos, 'ema50-color', 'size-sm', `EMA50: ₹${stock.ema50.toFixed(2)}`);
+                this.addCircle(techContainer, ema100Pos, 'ema100-color', 'size-md', `EMA100: ₹${stock.ema100.toFixed(2)}`);
+                this.addCircle(techContainer, ema200Pos, 'ema200-color', 'size-lg', `EMA200: ₹${stock.ema200.toFixed(2)}`);
+
+                // Price triangle (downward) above line
+                const triangle = document.createElement("div");
+                triangle.className = "price-triangle";
+                triangle.style.left = `${pricePos}%`;
+                triangle.style.top = "-4px";
+                triangle.style.position = "absolute";
+                triangle.title = `Current LTP: ₹${stock.price.toFixed(2)}`;
+                techContainer.appendChild(triangle);
+            }
+
+            // Day range markers
+            const dayContainerId = `day-markers-${stock.symbol.replace(/[^a-zA-Z0-9]/g, '')}`;
+            const dayContainer = document.getElementById(dayContainerId);
+            if (dayContainer) {
+                dayContainer.innerHTML = '';
+                // low marker (left circle)
+                const lowCircle = document.createElement("div");
+                lowCircle.className = "circle-marker day-marker";
+                lowCircle.style.left = `0%`;
+                lowCircle.style.top = "14px";
+                lowCircle.style.background = "#5F7BBF";
+                lowCircle.style.width = "14px";
+                lowCircle.style.height = "14px";
+                lowCircle.title = `Day Low: ₹${stock.dayLow.toFixed(2)}`;
+                dayContainer.appendChild(lowCircle);
+
+                // high marker (right circle)
+                const highCircle = document.createElement("div");
+                highCircle.className = "circle-marker";
+                highCircle.style.left = `100%`;
+                highCircle.style.top = "14px";
+                highCircle.style.background = "#FACC15";
+                highCircle.style.width = "14px";
+                highCircle.style.height = "14px";
+                highCircle.title = `Day High: ₹${stock.dayHigh.toFixed(2)}`;
+                dayContainer.appendChild(highCircle);
+
+                // price triangle for day range
+                const dayTriangle = document.createElement("div");
+                dayTriangle.className = "price-triangle";
+                dayTriangle.style.left = `${priceDayPos}%`;
+                dayTriangle.style.top = "-4px";
+                dayTriangle.style.borderTopColor = "#C0E0FF";
+                dayTriangle.title = `Current: ₹${stock.price.toFixed(2)} (${priceDayPos.toFixed(1)}% of range)`;
+                dayContainer.appendChild(dayTriangle);
+            }
+        }
+    }
+
+    // helper to add circle marker in container
+    function addCircle(container, leftPercent, colorClass, sizeClass, tooltipText) {
+        const circle = document.createElement("div");
+        circle.className = `circle-marker ${colorClass} ${sizeClass}`;
+        circle.style.left = `${leftPercent}%`;
+        circle.style.top = "14px";
+        circle.title = tooltipText;
+        container.appendChild(circle);
+    }
+
+    // bind sort and refresh logic
+    let currentSortKey = "trend";
+    let stocksData = [...rawStocks];
+
+    function refreshAndRender() {
+        // optional: simulate tiny price fluctuation to mimic refresh (real-time feeling)
+        // but keep consistent with data, just refreshing visual and time
+        renderDashboard(stocksData, currentSortKey, true);
+    }
+
+    function changeSortAndRender(key) {
+        currentSortKey = key;
+        renderDashboard(stocksData, currentSortKey, false);
+    }
+
+    // event binding and initial load
+    document.addEventListener("DOMContentLoaded", () => {
+        // attach sorting listener
+        const sortSelect = document.getElementById("sortSelect");
+        if (sortSelect) {
+            sortSelect.addEventListener("change", (e) => {
+                changeSortAndRender(e.target.value);
+            });
+        }
+        const refreshBtn = document.getElementById("refreshBtn");
+        if (refreshBtn) {
+            refreshBtn.addEventListener("click", () => {
+                // Simulate slight price/ema updates to feel dynamic (keeping trend integrity)
+                stocksData = stocksData.map(stock => {
+                    const variation = (Math.random() - 0.5) * 4.2;
+                    const newPrice = Math.max(5, stock.price + variation);
+                    // also shift EMAs slightly to maintain realistic clustering but keep original structure
+                    const shiftFactor = variation * 0.3;
+                    return {
+                        ...stock,
+                        price: parseFloat(newPrice.toFixed(2)),
+                        ema20: parseFloat((stock.ema20 + shiftFactor * 0.7).toFixed(2)),
+                        ema50: parseFloat((stock.ema50 + shiftFactor * 0.5).toFixed(2)),
+                        ema100: parseFloat((stock.ema100 + shiftFactor * 0.3).toFixed(2)),
+                        ema200: parseFloat((stock.ema200 + shiftFactor * 0.2).toFixed(2)),
+                        dayLow: parseFloat((stock.dayLow + (variation * 0.2)).toFixed(2)),
+                        dayHigh: parseFloat((stock.dayHigh + (variation * 0.35)).toFixed(2)),
+                        changePercent: parseFloat((stock.changePercent + (Math.random() - 0.5) * 0.6).toFixed(2))
+                    };
+                });
+                refreshAndRender();
+            });
+        }
+        // attach helper methods to window for circle maker
+        window.addCircle = addCircle;
+        // initial render
+        renderDashboard(stocksData, "trend", true);
+    });
+
+    // make helper globally accessible for dynamic injection (re-render safety)
+    window.addCircle = addCircle;
+</script>
 </body>
-
 </html>
