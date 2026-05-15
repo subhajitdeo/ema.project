@@ -1,6 +1,6 @@
 """
 NSE Nifty 500 Trend Strength Scanner
-Uses direct Yahoo Finance API (no yfinance library) - more reliable.
+Uses nsepython (direct NSEIndia API) - reliable for Indian stocks.
 """
 
 import json
@@ -8,17 +8,32 @@ import time
 import logging
 import sys
 import os
-import requests
-from datetime import datetime
-from typing import Dict, List, Optional
 import pandas as pd
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
 from tqdm import tqdm
+
+# Try multiple import strategies for compatibility
+try:
+    # Modern nsepython (server edition)
+    from nsepython import nse_eq_history
+    logger = logging.getLogger(__name__)
+    logger.info("Using nsepython server edition")
+except ImportError:
+    try:
+        # Alternative import (local edition)
+        import nsepython
+        logger = logging.getLogger(__name__)
+        logger.info("Using nsepython local edition")
+    except ImportError:
+        logging.error("nsepython not installed! Run: pip install nsepython")
+        sys.exit(1)
 
 # ==================== CONFIGURATION ====================
 SYMBOLS_FILE = "nifty500.txt"
 OUTPUT_FILE = "data/results.json"
 YEARS_OF_DATA = 3
-REQUEST_DELAY = 0.5  # seconds between stocks
+REQUEST_DELAY = 0.5  # seconds between stocks (avoid rate limiting)
 MAX_RETRIES = 3
 
 # Scoring weights
@@ -37,100 +52,100 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Headers to mimic a real browser
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'application/json',
-    'Accept-Language': 'en-US,en;q=0.9',
-}
-
 
 def load_symbols(file_path: str) -> List[str]:
     """Load NSE symbols from text file."""
     try:
         with open(file_path, 'r') as f:
             symbols = [line.strip().upper() for line in f if line.strip()]
-        logger.info(f"Loaded {len(symbols)} symbols")
+        logger.info(f"Loaded {len(symbols)} symbols from {file_path}")
         return symbols
     except FileNotFoundError:
         logger.error(f"Symbol file {file_path} not found!")
         return []
 
 
-def fetch_stock_data_direct(symbol: str, period: str = "3y") -> Optional[pd.DataFrame]:
+def fetch_stock_data_nsepython(symbol: str, years: int = 3) -> Optional[pd.DataFrame]:
     """
-    Fetch daily OHLCV data using direct Yahoo Finance API (no yfinance).
-    Uses .NS suffix for NSE stocks.
+    Fetch daily OHLCV data using nsepython.
+    Gets historical data directly from NSE India servers.
     """
-    ticker = f"{symbol}.NS"
-    # Calculate number of days for 3 years (approx 756 trading days, but we fetch more)
-    # Yahoo finance uses intervals: 1d, 1wk, 1mo. We'll use 1d.
-    # We need enough data for EMA200 (~200 days). Fetch 5 years to be safe.
-    end_date = int(datetime.now().timestamp())
-    start_date = int((datetime.now() - pd.Timedelta(days=5*365)).timestamp())
-    
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
-    params = {
-        'period1': start_date,
-        'period2': end_date,
-        'interval': '1d',
-        'includePrePost': 'false',
-        'events': 'div,splits'
-    }
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=years * 365 + 30)  # Add buffer
     
     for attempt in range(MAX_RETRIES):
         try:
-            response = requests.get(url, headers=HEADERS, params=params, timeout=15)
-            if response.status_code != 200:
-                logger.warning(f"{symbol}: HTTP {response.status_code}")
-                time.sleep(2)
-                continue
+            # Format dates as required by nsepython
+            from_date = start_date.strftime("%d-%m-%Y")
+            to_date = end_date.strftime("%d-%m-%Y")
             
-            data = response.json()
+            # Fetch historical data
+            # nse_eq_history(symbol, from_date, to_date, series="EQ")
+            # Different nsepython versions may have different signatures
+            try:
+                # Try server edition style
+                data = nse_eq_history(symbol, from_date, to_date, series="EQ")
+            except TypeError:
+                # Try local edition style
+                import nsepython as nse
+                data = nse.nse_eq_history(symbol, from_date, to_date)
             
-            # Parse the response
-            if 'chart' not in data or 'result' not in data['chart'] or not data['chart']['result']:
-                logger.warning(f"{symbol}: No data in response")
+            if data is None or len(data) == 0:
+                logger.warning(f"{symbol}: No data returned")
                 return None
             
-            result = data['chart']['result'][0]
-            timestamps = result['timestamp']
-            quote = result['indicators']['quote'][0]
+            # Convert to DataFrame if needed
+            if isinstance(data, dict):
+                df = pd.DataFrame.from_dict(data, orient='index')
+            else:
+                df = pd.DataFrame(data)
             
-            # Extract columns
-            opens = quote.get('open', [])
-            highs = quote.get('high', [])
-            lows = quote.get('low', [])
-            closes = quote.get('close', [])
-            volumes = quote.get('volume', [])
-            
-            # Build DataFrame
-            df = pd.DataFrame({
-                'Open': opens,
-                'High': highs,
-                'Low': lows,
-                'Close': closes,
-                'Volume': volumes
+            # Ensure we have the required columns
+            # nsepython typically returns columns: OPEN, HIGH, LOW, CLOSE, VOLUME
+            df = df.rename(columns={
+                'OPEN': 'Open',
+                'HIGH': 'High',
+                'LOW': 'Low',
+                'CLOSE': 'Close',
+                'VOLUME': 'Volume',
+                'open': 'Open',
+                'high': 'High',
+                'low': 'Low',
+                'close': 'Close',
+                'volume': 'Volume'
             })
             
-            # Convert timestamp to datetime index
-            df.index = pd.to_datetime(timestamps, unit='s')
+            # Convert index to datetime and sort
+            df.index = pd.to_datetime(df.index)
+            df.sort_index(inplace=True)
             
-            # Remove rows with NaN in Close (non-trading days)
+            # Select only OHLCV columns
+            ohlcv_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+            available_cols = [col for col in ohlcv_cols if col in df.columns]
+            if not available_cols:
+                logger.warning(f"{symbol}: No OHLCV columns found")
+                return None
+            df = df[available_cols].copy()
+            
+            # Convert to numeric
+            for col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+            
+            # Remove NaN rows
             df = df.dropna(subset=['Close'])
             
-            if df.empty or len(df) < 200:
+            if len(df) < 200:
                 logger.warning(f"{symbol}: Only {len(df)} days, need 200+")
                 return None
             
-            # Sort by date
-            df.sort_index(inplace=True)
+            logger.debug(f"{symbol}: Fetched {len(df)} days of data")
             return df
             
         except Exception as e:
             logger.warning(f"{symbol} attempt {attempt+1} failed: {str(e)[:100]}")
             if attempt < MAX_RETRIES - 1:
-                time.sleep(3 * (attempt + 1))
+                time.sleep(3)
+    
     return None
 
 
@@ -145,7 +160,10 @@ def calculate_emas(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_metrics(df: pd.DataFrame, symbol: str) -> Optional[Dict]:
-    """Extract latest metrics and compute trend indicators."""
+    """
+    Extract latest metrics and compute trend indicators.
+    Returns None if any critical data is missing.
+    """
     try:
         if df is None or df.empty:
             return None
@@ -277,7 +295,7 @@ def calculate_trend_scores(stocks_data: List[Dict]) -> List[Dict]:
 def run_scanner():
     """Main execution."""
     start_time = datetime.now()
-    logger.info("Starting NSE Nifty 500 Trend Strength Scanner (Direct Yahoo API)")
+    logger.info("Starting NSE Nifty 500 Trend Strength Scanner (nsepython provider)")
     
     symbols = load_symbols(SYMBOLS_FILE)
     if not symbols:
@@ -289,7 +307,7 @@ def run_scanner():
     for symbol in tqdm(symbols, desc="Scanning stocks"):
         time.sleep(REQUEST_DELAY)
         
-        df = fetch_stock_data_direct(symbol, period=f"{YEARS_OF_DATA}y")
+        df = fetch_stock_data_nsepython(symbol, years=YEARS_OF_DATA)
         if df is None:
             failed_symbols.append(symbol)
             continue
