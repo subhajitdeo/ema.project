@@ -1,5 +1,4 @@
 /* style.css */
-
 *{
     margin:0;
     padding:0;
@@ -67,24 +66,13 @@ button{
         rgba(10,20,40,0.95),
         rgba(5,15,35,0.95)
     );
-
     border:1px solid #162033;
-
     border-radius:22px;
-
     padding:28px;
-
     margin-bottom:18px;
-
     display:grid;
-
-    grid-template-columns:
-        1.4fr
-        1fr
-        0.9fr;
-
+    grid-template-columns: 1.4fr 1fr 0.9fr;
     gap:30px;
-
     align-items:center;
 }
 
@@ -233,13 +221,10 @@ button{
     position:absolute;
     width:0;
     height:0;
-
     border-left:10px solid transparent;
     border-right:10px solid transparent;
     border-top:18px solid white;
-
     top:-10px;
-
     transform:translateX(-50%);
 }
 
@@ -264,10 +249,8 @@ button{
 
 .range-labels{
     margin-top:20px;
-
     display:flex;
     justify-content:space-between;
-
     font-size:18px;
 }
 
@@ -286,15 +269,12 @@ button{
 }
 
 @media(max-width:1100px){
-
     .stock-card{
         grid-template-columns:1fr;
     }
-
     .middle-section,
     .right-section{
         border-left:none;
         padding-left:0;
     }
-
 }
