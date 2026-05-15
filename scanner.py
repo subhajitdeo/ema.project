@@ -1,5 +1,5 @@
 """
-NSE Nifty 500 Trend Strength Scanner - Fixed scalar extraction
+NSE Nifty 500 Trend Strength Scanner - Fixed ambiguous truth value
 """
 
 import json
@@ -65,35 +65,37 @@ def compute_metrics(df: pd.DataFrame, symbol: str) -> Optional[Dict]:
         if df is None or df.empty:
             return None
         df = calculate_emas(df)
-        # Extract scalar values directly using .iloc[-1] on each column
-        close = df['Close'].iloc[-1]
-        ema20 = df['EMA20'].iloc[-1]
-        ema50 = df['EMA50'].iloc[-1]
-        ema100 = df['EMA100'].iloc[-1]
-        ema200 = df['EMA200'].iloc[-1]
-        
+        # Extract the last row and convert each value to a Python float
+        last = df.iloc[-1]
+        close = float(last['Close'])
+        ema20 = float(last['EMA20'])
+        ema50 = float(last['EMA50'])
+        ema100 = float(last['EMA100'])
+        ema200 = float(last['EMA200'])
+
         if any(pd.isna(x) for x in [ema20, ema50, ema100, ema200]):
             return None
-        
-        prev_close = df['Close'].iloc[-2] if len(df) > 1 else close
+
+        prev_close = float(df['Close'].iloc[-2]) if len(df) > 1 else close
         daily_gain = (close - prev_close) / prev_close * 100
-        
+
         vol_series = df['Volume'].iloc[-21:-1]
-        avg_vol = vol_series.mean() if len(vol_series) >= 10 else df['Volume'].iloc[-1]
-        current_vol = df['Volume'].iloc[-1]
+        avg_vol = float(vol_series.mean()) if len(vol_series) >= 10 else float(df['Volume'].iloc[-1])
+        current_vol = float(df['Volume'].iloc[-1])
         rel_vol = current_vol / avg_vol if avg_vol > 0 else 1.0
-        
+
         ema_sep = (ema20 - ema200) / ema200 * 100
         price_dist = (close - ema20) / ema20 * 100
-        
+
         if len(df) >= 6:
-            close_5d_ago = df['Close'].iloc[-6]
+            close_5d_ago = float(df['Close'].iloc[-6])
             momentum = (close - close_5d_ago) / close_5d_ago * 100
         else:
             momentum = daily_gain
-        
-        is_bullish = (close > ema20 > ema50 > ema100 > ema200)
-        
+
+        # Break down the comparison to avoid ambiguous truth value
+        is_bullish = (close > ema20) and (ema20 > ema50) and (ema50 > ema100) and (ema100 > ema200)
+
         return {
             "symbol": symbol,
             "price": round(close, 2),
