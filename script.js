@@ -1,4 +1,4 @@
-async function loadData() {
+async function loadData(){
 
     const response = await fetch("data/results.json");
 
@@ -6,67 +6,91 @@ async function loadData() {
 
     const stocks = result.data;
 
-    document.getElementById("lastUpdated").innerHTML =
-        "Last Updated: " + result.last_updated;
+    const stockList = document.getElementById("stockList");
 
-    const tableBody = document.getElementById("tableBody");
+    stockList.innerHTML = "";
 
-    tableBody.innerHTML = "";
+    stocks.forEach(stock => {
 
-    stocks.forEach((stock, index) => {
+        const maxValue = Math.max(
+            stock.price,
+            stock.ema20,
+            stock.ema50,
+            stock.ema100,
+            stock.ema200
+        );
 
-        const trendClass = stock.bullish
-            ? "green"
-            : "red";
+        const card = document.createElement("div");
 
-        const trendText = stock.bullish
-            ? "BULLISH"
-            : "WEAK";
+        card.className = "stock-card";
 
-        const row = `
-            <tr>
-                <td>${index + 1}</td>
-                <td>${stock.symbol}</td>
-                <td>${stock.price}</td>
-                <td>${stock.ema20}</td>
-                <td>${stock.ema50}</td>
-                <td>${stock.ema100}</td>
-                <td>${stock.ema200}</td>
-                <td>${stock.score}</td>
-                <td class="${trendClass}">
-                    ${trendText}
-                </td>
-            </tr>
+        card.innerHTML = `
+
+            <div class="stock-header">
+
+                <div>
+                    <h2>${stock.symbol}</h2>
+                    <h3>₹${stock.price}</h3>
+                </div>
+
+                <div>
+                    Score: ${stock.score}
+                </div>
+
+            </div>
+
+            <div class="details">
+
+                <p>EMA20 : ${stock.ema20}</p>
+
+                <div class="bar">
+                    <div class="fill ema20"
+                    style="width:${(stock.ema20/maxValue)*100}%">
+                    </div>
+                </div>
+
+                <p>EMA50 : ${stock.ema50}</p>
+
+                <div class="bar">
+                    <div class="fill ema50"
+                    style="width:${(stock.ema50/maxValue)*100}%">
+                    </div>
+                </div>
+
+                <p>EMA100 : ${stock.ema100}</p>
+
+                <div class="bar">
+                    <div class="fill ema100"
+                    style="width:${(stock.ema100/maxValue)*100}%">
+                    </div>
+                </div>
+
+                <p>EMA200 : ${stock.ema200}</p>
+
+                <div class="bar">
+                    <div class="fill ema200"
+                    style="width:${(stock.ema200/maxValue)*100}%">
+                    </div>
+                </div>
+
+            </div>
         `;
 
-        tableBody.innerHTML += row;
-    });
+        const header = card.querySelector(".stock-header");
+        const details = card.querySelector(".details");
 
-    setupSearch();
-}
+        header.addEventListener("click", () => {
 
-function setupSearch() {
-
-    const input = document.getElementById("searchInput");
-
-    input.addEventListener("keyup", function () {
-
-        const filter = input.value.toUpperCase();
-
-        const rows = document.querySelectorAll("tbody tr");
-
-        rows.forEach(row => {
-
-            const stock =
-                row.children[1].textContent;
-
-            if (stock.toUpperCase().includes(filter)) {
-                row.style.display = "";
-            } else {
-                row.style.display = "none";
+            if(details.style.display === "block"){
+                details.style.display = "none";
+            }
+            else{
+                details.style.display = "block";
             }
 
         });
+
+        stockList.appendChild(card);
 
     });
 
