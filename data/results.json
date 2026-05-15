@@ -1,59 +1,7 @@
 {
-    "last_updated": "2026-05-15 17:17:12",
+    "last_updated": "2026-05-15 17:23:54",
     "total_stocks": 10,
     "data": [
-        {
-            "symbol": "AUBANK",
-            "price": 990.5,
-            "change": -1.41,
-            "low": 976.2,
-            "high": 1009.9,
-            "ema20": 1005.92,
-            "ema50": 985.19,
-            "ema100": 960.75,
-            "ema200": 903.68,
-            "bullish": false,
-            "score": 9.43
-        },
-        {
-            "symbol": "ABB",
-            "price": 6381.0,
-            "change": -0.75,
-            "low": 6307.0,
-            "high": 6433.5,
-            "ema20": 6790.47,
-            "ema50": 6579.53,
-            "ema100": 6200.93,
-            "ema200": 5918.43,
-            "bullish": false,
-            "score": 8.05
-        },
-        {
-            "symbol": "ACMESOLAR",
-            "price": 276.0,
-            "change": -2.49,
-            "low": 274.85,
-            "high": 285.35,
-            "ema20": 288.5,
-            "ema50": 275.74,
-            "ema100": 263.22,
-            "ema200": 256.31,
-            "bullish": false,
-            "score": 7.75
-        },
-        {
-            "symbol": "AIAENG",
-            "price": 3856.3,
-            "change": 0.04,
-            "low": 3840.0,
-            "high": 3935.4,
-            "ema20": 3882.91,
-            "ema50": 3844.02,
-            "ema100": 3787.95,
-            "ema200": 3685.47,
-            "bullish": false,
-            "score": 4.59
-        },
         {
             "symbol": "360ONE",
             "price": 1093.8,
@@ -64,34 +12,7 @@
             "ema50": 1061.95,
             "ema100": 1071.8,
             "ema200": 1072.89,
-            "bullish": false,
-            "score": 1.96
-        },
-        {
-            "symbol": "APLAPOLLO",
-            "price": 1890.2,
-            "change": 0.01,
-            "low": 1870.6,
-            "high": 1900.6,
-            "ema20": 1941.41,
-            "ema50": 1981.15,
-            "ema100": 1967.8,
-            "ema200": 1890.68,
-            "bullish": false,
-            "score": 0.11
-        },
-        {
-            "symbol": "AADHARHFC",
-            "price": 464.15,
-            "change": -2.24,
-            "low": 459.05,
-            "high": 479.8,
-            "ema20": 486.89,
-            "ema50": 481.54,
-            "ema100": 480.35,
-            "ema200": 478.34,
-            "bullish": false,
-            "score": -2.89
+            "score": 0
         },
         {
             "symbol": "3MINDIA",
@@ -103,21 +24,19 @@
             "ema50": 32490.04,
             "ema100": 32919.86,
             "ema200": 32614.05,
-            "bullish": false,
-            "score": -4.24
+            "score": 0
         },
         {
-            "symbol": "AWL",
-            "price": 199.73,
-            "change": -0.54,
-            "low": 199.3,
-            "high": 203.78,
-            "ema20": 198.84,
-            "ema50": 196.43,
-            "ema100": 205.47,
-            "ema200": 224.79,
-            "bullish": false,
-            "score": -11.32
+            "symbol": "ABB",
+            "price": 6381.0,
+            "change": -0.75,
+            "low": 6307.0,
+            "high": 6433.5,
+            "ema20": 6790.47,
+            "ema50": 6579.53,
+            "ema100": 6200.93,
+            "ema200": 5918.43,
+            "score": 0
         },
         {
             "symbol": "ACC",
@@ -129,8 +48,79 @@
             "ema50": 1438.15,
             "ema100": 1526.98,
             "ema200": 1654.99,
-            "bullish": false,
-            "score": -18.86
+            "score": 0
+        },
+        {
+            "symbol": "ACMESOLAR",
+            "price": 276.0,
+            "change": -2.49,
+            "low": 274.85,
+            "high": 285.35,
+            "ema20": 288.5,
+            "ema50": 275.74,
+            "ema100": 263.22,
+            "ema200": 256.31,
+            "score": 0
+        },
+        {
+            "symbol": "AIAENG",
+            "price": 3856.3,
+            "change": 0.04,
+            "low": 3840.0,
+            "high": 3935.4,
+            "ema20": 3882.91,
+            "ema50": 3844.02,
+            "ema100": 3787.95,
+            "ema200": 3685.47,
+            "score": 0
+        },
+        {
+            "symbol": "APLAPOLLO",
+            "price": 1890.2,
+            "change": 0.01,
+            "low": 1870.6,
+            "high": 1900.6,
+            "ema20": 1941.41,
+            "ema50": 1981.15,
+            "ema100": 1967.8,
+            "ema200": 1890.68,
+            "score": 0
+        },
+        {
+            "symbol": "AUBANK",
+            "price": 990.5,
+            "change": -1.41,
+            "low": 976.2,
+            "high": 1009.9,
+            "ema20": 1005.92,
+            "ema50": 985.19,
+            "ema100": 960.75,
+            "ema200": 903.68,
+            "score": 0
+        },
+        {
+            "symbol": "AWL",
+            "price": 199.73,
+            "change": -0.54,
+            "low": 199.3,
+            "high": 203.78,
+            "ema20": 198.84,
+            "ema50": 196.43,
+            "ema100": 205.47,
+            "ema200": 224.79,
+            "score": 0
+        },
+        {
+            "symbol": "AADHARHFC",
+            "price": 464.15,
+            "change": -2.24,
+            "low": 459.05,
+            "high": 479.8,
+            "ema20": 486.89,
+            "ema50": 481.54,
+            "ema100": 480.35,
+            "ema200": 478.34,
+            "score": 0
         }
     ]
 }
