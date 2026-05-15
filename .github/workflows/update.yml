@@ -1,4 +1,4 @@
-name: NSE Scanner - Manual Update
+name: Update EMA Scanner
 
 on:
   workflow_dispatch:
@@ -9,20 +9,27 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Run scanner
-        run: python scanner.py
-      - name: Commit updated data
+          python-version: "3.11"
+
+      - name: Install Libraries
+        run: pip install -r scanner/requirements.txt
+
+      - name: Run Scanner
+        run: python scanner/scanner.py
+
+      - name: Commit Results
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/results.json
-          git diff --staged --quiet || git commit -m "Auto-update NSE scan [skip ci]"
+          git config --global user.name github-actions
+          git config --global user.email github-actions@github.com
+          git add .
+          git commit -m "Updated EMA data" || echo "No changes"
           git push
