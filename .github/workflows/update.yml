@@ -1,21 +1,24 @@
 name: Update EMA Scanner
 
 on:
+  schedule:
+    # 5:00 PM IST = 11:30 UTC (IST is UTC+5:30)
+    # Note: 5:00 PM IST = 11:30 UTC
+    - cron: '30 11 * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-
   scan:
-
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -23,18 +26,32 @@ jobs:
           python-version: "3.11"
 
       - name: Install Dependencies
-        run: pip install -r scanner/requirements.txt
+        run: |
+          if [ -f scanner/requirements.txt ]; then
+            pip install -r scanner/requirements.txt
+          else
+            echo "⚠️ scanner/requirements.txt not found, installing common packages"
+            pip install pandas numpy yfinance
+          fi
 
       - name: Run Scanner
         run: python scanner/scanner.py
 
       - name: Commit Updated JSON
         run: |
-          git config --global user.name github-actions
-          git config --global user.email github-actions@github.com
-
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Pull latest changes to avoid conflicts
+          git pull origin main --rebase || true
+          
+          # Add all changes
           git add .
-
-          git commit -m "Updated EMA data" || echo "No changes"
-
-          git push
+          
+          # Commit if there are changes
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Auto-update EMA scanner data [skip ci]"
+            git push origin main
+          fi
