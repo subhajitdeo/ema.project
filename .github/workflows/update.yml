@@ -3,7 +3,6 @@ name: Update EMA Scanner
 on:
   schedule:
     # 5:00 PM IST = 11:30 UTC (IST is UTC+5:30)
-    # Note: 5:00 PM IST = 11:30 UTC
     - cron: '30 11 * * *'
   workflow_dispatch:
 
@@ -30,11 +29,11 @@ jobs:
           if [ -f scanner/requirements.txt ]; then
             pip install -r scanner/requirements.txt
           else
-            echo "⚠️ scanner/requirements.txt not found, installing common packages"
-            pip install pandas numpy yfinance
+            echo "⚠️ scanner/requirements.txt not found, installing pandas"
+            pip install pandas
           fi
 
-      - name: Run Scanner
+      - name: Run EMA Scanner
         run: python scanner/scanner.py
 
       - name: Commit Updated JSON
@@ -46,7 +45,7 @@ jobs:
           git pull origin main --rebase || true
           
           # Add all changes
-          git add .
+          git add data/results.json
           
           # Commit if there are changes
           if git diff --cached --quiet; then
