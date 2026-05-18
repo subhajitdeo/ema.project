@@ -10,40 +10,6 @@ OUTPUT_FOLDER = "data/ema_results"
 # Create output folder
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-def parse_yahoo_finance_data(data):
-    """Parse Yahoo Finance JSON format into candles array"""
-    candles = []
-    
-    try:
-        result = data.get('chart', {}).get('result', [])
-        if not result:
-            return []
-        
-        chart_data = result[0]
-        timestamps = chart_data.get('timestamp', [])
-        quotes = chart_data.get('indicators', {}).get('quote', [{}])[0]
-        
-        for i in range(len(timestamps)):
-            o = quotes.get('open', [None])[i]
-            h = quotes.get('high', [None])[i]
-            l = quotes.get('low', [None])[i]
-            c = quotes.get('close', [None])[i]
-            v = quotes.get('volume', [None])[i]
-            
-            if None not in (o, h, l, c, v):
-                candles.append({
-                    'time': pd.Timestamp(timestamps[i], unit='s').strftime('%Y-%m-%d'),
-                    'open': float(o),
-                    'high': float(h),
-                    'low': float(l),
-                    'close': float(c),
-                    'volume': int(v)
-                })
-        
-        return candles
-    except Exception as e:
-        return []
-
 def calculate_ema(series, period):
     """Calculate EMA for a series"""
     return series.ewm(span=period, adjust=False).mean()
@@ -86,6 +52,7 @@ def process_all_stocks():
     
     results = []
     failed = 0
+    skipped = 0
     
     for i, json_file in enumerate(json_files, 1):
         # Extract symbol name (remove .NS.json)
@@ -94,18 +61,28 @@ def process_all_stocks():
         try:
             file_path = os.path.join(DATA_FOLDER, json_file)
             with open(file_path, 'r') as f:
-                data = json.load(f)
+                candles = json.load(f)
             
-            # Parse candles
-            candles = parse_yahoo_finance_data(data)
+            # Check if candles is a list (direct array format)
+            if not isinstance(candles, list):
+                print(f"[{i}/{len(json_files)}] ⚠️ {symbol}: Invalid format (not a list)")
+                skipped += 1
+                continue
             
             if len(candles) < 200:
                 print(f"[{i}/{len(json_files)}] ⚠️ {symbol}: Only {len(candles)} candles, skipping")
-                failed += 1
+                skipped += 1
                 continue
             
-            # Convert to DataFrame for EMA calculation
+            # Convert to DataFrame
             df = pd.DataFrame(candles)
+            
+            # Ensure columns exist
+            required_cols = ['close', 'open', 'high', 'low']
+            if not all(col in df.columns for col in required_cols):
+                print(f"[{i}/{len(json_files)}] ⚠️ {symbol}: Missing required columns")
+                skipped += 1
+                continue
             
             # Calculate EMAs
             df['EMA20'] = calculate_ema(df['close'], 20)
@@ -127,6 +104,10 @@ def process_all_stocks():
                 change_pct = ((latest_close - prev_close) / prev_close) * 100
             else:
                 change_pct = 0
+            
+            # Get latest high/low
+            latest_high = latest['high']
+            latest_low = latest['low']
             
             # Calculate score
             score = calculate_score(latest_close, ema20, ema50, ema100, ema200)
@@ -152,6 +133,8 @@ def process_all_stocks():
                 "date": datetime.now().strftime("%Y-%m-%d"),
                 "price": round(latest_close, 2),
                 "change_percent": round(change_pct, 2),
+                "high": round(latest_high, 2),
+                "low": round(latest_low, 2),
                 "ema20": round(ema20, 2),
                 "ema50": round(ema50, 2),
                 "ema100": round(ema100, 2),
@@ -193,6 +176,7 @@ def process_all_stocks():
         "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "total_stocks_found": len(json_files),
         "total_stocks_processed": len(results),
+        "skipped_stocks": skipped,
         "failed_stocks": failed,
         "statistics": {
             "average_score": round(avg_score, 2),
@@ -216,17 +200,22 @@ def process_all_stocks():
         json.dump(final_data, f, indent=2)
     
     # Save CSV for Excel viewing
-    df_results = pd.DataFrame(results)
-    df_results.to_csv("data/ema_results.csv", index=False)
+    if results:
+        df_results = pd.DataFrame(results)
+        df_results.to_csv("data/ema_results.csv", index=False)
     
     print("\n" + "="*60)
     print(f"✅ EMA CALCULATION COMPLETE!")
-    print(f"   Processed: {len(results)}/{len(json_files)} stocks")
+    print(f"   Found: {len(json_files)} files")
+    print(f"   Processed: {len(results)} stocks")
+    print(f"   Skipped: {skipped}")
     print(f"   Failed: {failed}")
     print(f"   Average Score: {round(avg_score, 2)}")
     print(f"   Bullish Stocks: {bullish_count}")
+    print(f"   Bearish Stocks: {len(results) - bullish_count}")
     print(f"   Perfect Alignment: {perfect_count}")
-    print(f"   Top Stock: {top_stock} (Score: {top_score})")
+    if results:
+        print(f"   Top Stock: {top_stock} (Score: {top_score})")
     print(f"\n📁 Results saved to:")
     print(f"   - {OUTPUT_FOLDER}/ (individual stock JSONs)")
     print(f"   - {OUTPUT_FOLDER}/all_results.json")
