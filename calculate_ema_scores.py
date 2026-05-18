@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 
 # Path to the data folder in ema.dna
-DATA_FOLDER = "data/processed"  # Where copied JSON files are stored
+DATA_FOLDER = "data/"  # Where copied JSON files are stored
 OUTPUT_FOLDER = "data/scores"   # Where results will be saved
 
 # Create output folder if it doesn't exist
