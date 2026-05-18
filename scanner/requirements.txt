@@ -1,4 +1,1 @@
-yfinance
-pandas
-numpy
-requests
+pandas>=1.5.0
