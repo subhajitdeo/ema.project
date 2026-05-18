@@ -1,7 +1,5 @@
 import pandas as pd
-import yfinance as yf
 import json
-import time
 import os
 from datetime import datetime
 
@@ -13,40 +11,51 @@ stocks = pd.read_csv("scanner/nifty500.csv")
 
 results = []
 
+# Path to your processed data from calculate.py
+PROCESSED_DATA_DIR = "data/processed"
+
 for symbol in stocks["SYMBOL"]:
     try:
-        ticker = symbol + ".NS"
-        print(f"Scanning {ticker}")
-
-        data = yf.download(
-            ticker,
-            period="3y",
-            interval="1d",
-            progress=False,
-            auto_adjust=True
-        )
-
-        if data.empty or len(data) < 200:
-            print(f"Insufficient data for {symbol}")
+        print(f"Scanning {symbol}")
+        
+        # Read the processed JSON file (created by calculate.py)
+        json_path = os.path.join(PROCESSED_DATA_DIR, f"{symbol}.json")
+        
+        if not os.path.exists(json_path):
+            print(f"  No processed data for {symbol}, skipping...")
             continue
-
-        close = data["Close"].squeeze()
-        low = data["Low"].squeeze()
-        high = data["High"].squeeze()
-
-        latest_close = float(close.iloc[-1])
-        prev_close = float(close.iloc[-2])
-        change_pct = ((latest_close - prev_close) / prev_close) * 100
-
-        latest_low = float(low.iloc[-1])
-        latest_high = float(high.iloc[-1])
-
-        # Calculate EMAs
-        ema20 = float(close.ewm(span=20).mean().iloc[-1])
-        ema50 = float(close.ewm(span=50).mean().iloc[-1])
-        ema100 = float(close.ewm(span=100).mean().iloc[-1])
-        ema200 = float(close.ewm(span=200).mean().iloc[-1])
-
+        
+        with open(json_path, 'r') as f:
+            data = json.load(f)
+        
+        # Extract data from the JSON
+        candles = data.get('candles', [])
+        if len(candles) < 200:
+            print(f"  Insufficient candles ({len(candles)}) for {symbol}")
+            continue
+        
+        # Get latest prices
+        latest_close = data['latest_price']
+        
+        # Calculate change from previous day
+        if len(candles) >= 2:
+            prev_close = candles[-2]['close']
+            change_pct = ((latest_close - prev_close) / prev_close) * 100
+        else:
+            change_pct = 0
+        
+        # Get latest high/low
+        latest_high = candles[-1]['high']
+        latest_low = candles[-1]['low']
+        
+        # Get EMAs from indicators (already calculated in your JSON)
+        indicators = data.get('indicators', {})
+        
+        ema20 = indicators.get('EMA20', {}).get('value', latest_close)
+        ema50 = indicators.get('EMA50', {}).get('value', latest_close)
+        ema100 = indicators.get('EMA100', {}).get('value', latest_close)
+        ema200 = indicators.get('EMA200', {}).get('value', latest_close)
+        
         # ----- Score out of 100 based on sequence + symmetric gaps -----
         # Check if LTP > EMA20 > EMA50 > EMA100 > EMA200
         if latest_close > ema20 > ema50 > ema100 > ema200:
@@ -69,10 +78,10 @@ for symbol in stocks["SYMBOL"]:
                 symmetry_score = 0
         else:
             symmetry_score = 0
-
+        
         score = round(symmetry_score, 2)
-
-        # Store results (no bullish flag)
+        
+        # Store results
         results.append({
             "symbol": symbol,
             "price": round(latest_close, 2),
@@ -85,11 +94,11 @@ for symbol in stocks["SYMBOL"]:
             "ema200": round(ema200, 2),
             "score": score
         })
-
-        time.sleep(0.7)
-
+        
+        print(f"  ✅ {symbol} - Score: {score}, Price: {latest_close}")
+        
     except Exception as e:
-        print(f"Failed: {symbol} - {e}")
+        print(f"  ❌ Failed: {symbol} - {e}")
 
 # Sort by score (higher = better symmetry + alignment)
 results.sort(key=lambda x: x["score"], reverse=True)
@@ -103,4 +112,4 @@ final_data = {
 with open("data/results.json", "w") as f:
     json.dump(final_data, f, indent=4)
 
-print(f"Done. {len(results)} stocks saved.")
+print(f"\n✅ Done. {len(results)} stocks analyzed and saved to data/results.json")
