@@ -2,7 +2,7 @@ name: Copy Data from shape.dna
 
 on:
   schedule:
-    - cron: '40 09 * * *'  # Runs daily at 5:00 PM IST
+    - cron: '55 10 * * *'  # Runs daily at 5:00 PM IST
   workflow_dispatch:  # Can also run manually
 
 permissions:
