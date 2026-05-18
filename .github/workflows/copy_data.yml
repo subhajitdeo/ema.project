@@ -1,0 +1,55 @@
+name: Copy Data from shape.dna
+
+on:
+  schedule:
+    - cron: '30 11 * * *'  # Runs daily at 5:00 PM IST
+  workflow_dispatch:  # Can also run manually
+
+permissions:
+  contents: write
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout ema.dna
+        uses: actions/checkout@v4
+        with:
+          path: ema.dna
+          fetch-depth: 0
+
+      - name: Checkout shape.dna
+        uses: actions/checkout@v4
+        with:
+          repository: subhajitdeo/shape.dna
+          path: shape.dna
+          fetch-depth: 0
+
+      - name: Copy data folder from shape.dna to ema.dna
+        run: |
+          # Remove existing data folder in ema.dna (if any)
+          rm -rf ema.dna/data
+          
+          # Copy entire data folder from shape.dna
+          cp -r shape.dna/data ema.dna/
+          
+          echo "✅ Data copied successfully from shape.dna to ema.dna"
+          echo "📁 Copied: $(find ema.dna/data -type f | wc -l) files"
+
+      - name: Commit and push copied data
+        run: |
+          cd ema.dna
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Add the data folder
+          git add data/
+          
+          # Commit if there are changes
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Copy latest data from shape.dna [skip ci]"
+            git push origin main
+          fi
