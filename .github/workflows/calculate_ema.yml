@@ -2,8 +2,8 @@ name: Calculate EMA Scores
 
 on:
   schedule:
-    - cron: '00 12 * * *'  # Runs daily at 5:30 PM IST
-  workflow_dispatch:  # Can run manually
+    - cron: '30 11 * * *'  # Runs daily at 5:00 PM IST
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -25,7 +25,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          pip install pandas
 
       - name: Calculate EMA scores
         run: |
@@ -37,7 +37,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
           # Add all result files
-          git add data/ema_results/ data/ema_results.json data/ema_results.csv
+          git add data/results.json data/ema_results.csv data/ema_results_detailed.json
           
           # Commit if there are changes
           if git diff --cached --quiet; then
